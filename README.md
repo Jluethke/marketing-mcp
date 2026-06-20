@@ -32,7 +32,17 @@ Code). Restart Claude, then try a no-auth tool: "use autocomplete_suggestions fo
 
 To register without the installer (already have a venv or Python): `python register.py`.
 
-## Tools (26)
+## Tools (30)
+
+**Keyword research (bulk + locations)**
+- `keyword_research` — one call: expand seed keywords and/or pull metrics for a
+  keyword list, across many places at once, ranked by search volume and
+  commercial intent, returned as CSV. Chunks under the API's 20-seed cap.
+- `resolve_locations` — turn town/city/state names into Google Ads geo target ids
+  with reach, so you target specific areas instead of the whole country
+- `add_location_set` / `list_location_sets` — save a reusable named list of target
+  areas; pass `location_set="<name>"` to the keyword tools
+- `keyword_ideas` / `keyword_historical_metrics` also take `locations` / `location_set`
 
 **Clients (multi-account: granular + rollup)**
 - `list_clients` / `add_client` — register clients in `clients.json`, each with its

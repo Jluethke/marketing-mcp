@@ -5,4 +5,5 @@ __pycache__/
 *-service-account*.json
 *credentials*.json
 clients.json
+location_sets.json
 .venv/

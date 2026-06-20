@@ -204,15 +204,128 @@ def _ga4_property(client: str | None = None, override: str | None = None):
     return override or _client_field(client, "ga4_property_id")
 
 
+# ---- keyword helpers: locations, intent, CSV ------------------------------
+
+def _chunks(seq, n):
+    seq = list(seq)
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
+
+# Commercial / transactional intent markers vs informational ones. A keyword's
+# intent score is (high markers) minus (low markers); higher means more likely to
+# convert, which is what "high intent" means when picking keywords to bid on.
+_INTENT_HIGH = ("buy", "price", "pricing", "cost", "quote", "hire", "near me",
+                "for sale", "service", "services", "company", "companies", "agency",
+                "consultant", "best", "top", "cheap", "affordable", "deal", "discount",
+                "review", "reviews", "vs", "alternative", "software", "tool", "platform",
+                "solution", "provider", "contractor", "installer", "repair", "emergency",
+                "book", "order", "shop", "store", "rental", "rent", "lease", "estimate")
+_INTENT_LOW = ("what is", "how to", "why", "meaning", "definition", "examples",
+               "ideas", "diy", "tutorial", "guide", "learn", "history", "vs.")
+
+
+def _intent_score(kw: str) -> int:
+    t = kw.lower()
+    return sum(1 for m in _INTENT_HIGH if m in t) - sum(1 for m in _INTENT_LOW if m in t)
+
+
+def _priority(volume, intent, comp_index) -> float:
+    """Rank weight: search volume scaled up by commercial intent, lightly
+    discounted by competition. Sorting by this surfaces high-intent keywords that
+    are getting volume."""
+    comp = (comp_index or 0) / 100.0
+    return round((volume or 0) * (1 + max(0, intent)) * (1.0 - 0.3 * comp), 1)
+
+
+def _csv(rows: list, columns: list) -> str:
+    import csv as _csvmod
+    import io
+    buf = io.StringIO()
+    w = _csvmod.writer(buf)
+    w.writerow(columns)
+    for r in rows:
+        w.writerow([r.get(c, "") for c in columns])
+    return buf.getvalue()
+
+
+def _resolve_geo_targets(client, locations, country_code="US"):
+    """Map location items (each a numeric geo id, or a place name like
+    'Austin, Texas') to geoTargetConstants resource names. Returns
+    (resource_names, human) where human lists the resolved name/id/reach per place."""
+    res, human, names = [], [], []
+    for loc in locations:
+        s = str(loc).strip()
+        if not s:
+            continue
+        if s.isdigit():
+            res.append("geoTargetConstants/" + s)
+            human.append({"id": s, "name": s, "type": "id"})
+        else:
+            names.append(s)
+    if names:
+        svc = client.get_service("GeoTargetConstantService")
+        req = client.get_type("SuggestGeoTargetConstantsRequest")
+        req.locale = "en"
+        req.country_code = country_code
+        req.location_names.names.extend(names)
+        resp = svc.suggest_geo_target_constants(request=req)
+        best = {}  # one best match per requested name (highest reach)
+        for s in resp.geo_target_constant_suggestions:
+            key = s.search_term or s.geo_target_constant.name
+            if key not in best or s.reach > best[key].reach:
+                best[key] = s
+        for s in best.values():
+            g = s.geo_target_constant
+            res.append(g.resource_name)
+            human.append({"id": g.resource_name.split("/")[-1], "name": g.name,
+                          "type": g.target_type, "country": g.country_code, "reach": s.reach})
+    return res, human
+
+
+def _geo_targets_for(client, geo, locations, location_set, country_code):
+    """Resolve the geo targets for a keyword call from a saved location_set and/or
+    an explicit locations list, else fall back to the single `geo`."""
+    names = []
+    if location_set:
+        ls = _load_locsets().get("sets", {}).get(location_set, {})
+        names += list(ls.get("locations", []))
+        country_code = ls.get("country_code", country_code)
+    if locations:
+        names += list(locations)
+    if names:
+        return _resolve_geo_targets(client, names, country_code)
+    gid = _GEO.get(str(geo).upper(), str(geo))
+    return [_geo_res(geo)], [{"id": gid, "name": str(geo), "type": "geo"}]
+
+
+_LOCSETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "location_sets.json")
+
+
+def _load_locsets() -> dict:
+    try:
+        d = json.load(open(_LOCSETS_PATH, encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _save_locsets(d: dict) -> None:
+    json.dump(d, open(_LOCSETS_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+
+
 # ==== KEYWORD RESEARCH =====================================================
 
 @mcp.tool()
 def keyword_ideas(seed_keywords: list[str] | None = None, page_url: str | None = None,
                   geo: str = "US", language: str = "en", limit: int = 200,
-                  include_adult: bool = False) -> dict:
+                  include_adult: bool = False, locations: list[str] | None = None,
+                  location_set: str | None = None, country_code: str = "US") -> dict:
     """Keyword ideas from seed keywords and/or a landing-page URL, with average
-    monthly searches, competition, and top-of-page bid range. Without active ad
-    spend, volumes come back as Google's coarse ranges, not exact numbers."""
+    monthly searches, competition, and top-of-page bid range. Target one country
+    via `geo`, or many specific places via `locations` (town/city/state names or
+    geo ids) or a saved `location_set`. Without active ad spend, volumes come back
+    as Google's coarse ranges, not exact numbers."""
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -222,7 +335,12 @@ def keyword_ideas(seed_keywords: list[str] | None = None, page_url: str | None =
     req = client.get_type("GenerateKeywordIdeasRequest")
     req.customer_id = cid
     req.language = _lang_res(language)
-    req.geo_target_constants.append(_geo_res(geo))
+    try:
+        geo_targets, _h = _geo_targets_for(client, geo, locations, location_set, country_code)
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Google Ads API error (locations): " + str(e)}
+    for g in geo_targets:
+        req.geo_target_constants.append(g)
     req.include_adult_keywords = include_adult
     req.keyword_plan_network = client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH
     seeds = [s for s in (seed_keywords or []) if s]
@@ -256,9 +374,12 @@ def keyword_ideas(seed_keywords: list[str] | None = None, page_url: str | None =
 
 @mcp.tool()
 def keyword_historical_metrics(keywords: list[str], geo: str = "US",
-                               language: str = "en") -> dict:
+                               language: str = "en", locations: list[str] | None = None,
+                               location_set: str | None = None,
+                               country_code: str = "US") -> dict:
     """Historical monthly search volume (12-month series), competition score, and
-    bid range for a specific list of keywords."""
+    bid range for a specific list of keywords. Target one country via `geo`, or
+    many specific places via `locations` (names or ids) or a saved `location_set`."""
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -269,7 +390,12 @@ def keyword_historical_metrics(keywords: list[str], geo: str = "US",
     req.customer_id = cid
     req.keywords.extend([k for k in keywords if k])
     req.language = _lang_res(language)
-    req.geo_target_constants.append(_geo_res(geo))
+    try:
+        geo_targets, _h = _geo_targets_for(client, geo, locations, location_set, country_code)
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Google Ads API error (locations): " + str(e)}
+    for g in geo_targets:
+        req.geo_target_constants.append(g)
     req.keyword_plan_network = client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH
     try:
         resp = svc.generate_keyword_historical_metrics(request=req)
@@ -331,6 +457,128 @@ def forecast_keywords(keywords: list[str], max_cpc_bid: float = 1.0,
     return {"max_cpc_bid": max_cpc_bid, "impressions": round(f.impressions, 1),
             "clicks": round(f.clicks, 1), "cost": _dollars(f.cost_micros),
             "ctr": round(f.ctr, 4), "average_cpc": _dollars(f.average_cpc_micros)}
+
+
+@mcp.tool()
+def resolve_locations(location_names: list[str], country_code: str = "US") -> dict:
+    """Resolve place names (towns, cities, counties, states) to Google Ads geo
+    target ids with their reach, so you can target specific areas instead of the
+    whole country. Pass the returned ids (or the names) to the keyword tools'
+    `locations` arg, or save them with add_location_set."""
+    try:
+        client = _ads_client()
+        _customer_id()
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    try:
+        _rn, human = _resolve_geo_targets(client, location_names, country_code)
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Google Ads API error: " + str(e)}
+    return {"count": len(human), "locations": human}
+
+
+@mcp.tool()
+def add_location_set(name: str, locations: list[str], country_code: str = "US") -> dict:
+    """Save a reusable named set of target locations (town/city/state names or geo
+    ids), so you can pass location_set='<name>' to the keyword tools instead of
+    re-typing the list every time. Stored in location_sets.json (gitignored)."""
+    d = _load_locsets()
+    d.setdefault("sets", {})
+    items = [str(x).strip() for x in (locations or []) if str(x).strip()]
+    d["sets"][name] = {"locations": items, "country_code": country_code}
+    _save_locsets(d)
+    return {"saved": name, "count": len(items), "locations": items}
+
+
+@mcp.tool()
+def list_location_sets() -> dict:
+    """List the saved location sets (see add_location_set)."""
+    sets = _load_locsets().get("sets", {})
+    return {"count": len(sets),
+            "sets": {k: {"count": len(v.get("locations", [])),
+                         "country_code": v.get("country_code", "US"),
+                         "locations": v.get("locations", [])}
+                     for k, v in sets.items()}}
+
+
+@mcp.tool()
+def keyword_research(seed_keywords: list[str] | None = None, keywords: list[str] | None = None,
+                     locations: list[str] | None = None, location_set: str | None = None,
+                     geo: str = "US", language: str = "en", country_code: str = "US",
+                     limit: int = 500, min_searches: int = 0, as_csv: bool = True) -> dict:
+    """Bulk keyword research in one call, for the keyword-planner workflow. Expand
+    `seed_keywords` into ideas and/or pull metrics for an explicit `keywords` list,
+    across many places at once (`locations` names/ids or a saved `location_set`,
+    else `geo`), then rank by search volume and commercial intent and return a CSV
+    you can paste straight back into chat. Chunks under the Google Ads 20-seed cap,
+    so you can pass a long list instead of entering keywords one at a time."""
+    try:
+        client = _ads_client()
+        cid = _customer_id()
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    try:
+        geo_targets, human = _geo_targets_for(client, geo, locations, location_set, country_code)
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Google Ads API error (locations): " + str(e)}
+    svc = client.get_service("KeywordPlanIdeaService")
+    net = client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH
+    rows: dict = {}
+    try:
+        for chunk in _chunks([k for k in (keywords or []) if k], 1000):
+            req = client.get_type("GenerateKeywordHistoricalMetricsRequest")
+            req.customer_id = cid
+            req.keywords.extend(chunk)
+            req.language = _lang_res(language)
+            for g in geo_targets:
+                req.geo_target_constants.append(g)
+            req.keyword_plan_network = net
+            for r in svc.generate_keyword_historical_metrics(request=req).results:
+                m = r.keyword_metrics
+                rows[r.text.lower()] = {
+                    "keyword": r.text, "avg_monthly_searches": m.avg_monthly_searches,
+                    "competition": m.competition.name, "competition_index": m.competition_index,
+                    "low_bid": _dollars(m.low_top_of_page_bid_micros),
+                    "high_bid": _dollars(m.high_top_of_page_bid_micros)}
+        for chunk in _chunks([s for s in (seed_keywords or []) if s], 20):
+            req = client.get_type("GenerateKeywordIdeasRequest")
+            req.customer_id = cid
+            req.language = _lang_res(language)
+            for g in geo_targets:
+                req.geo_target_constants.append(g)
+            req.keyword_plan_network = net
+            req.keyword_seed.keywords.extend(chunk)
+            for idea in svc.generate_keyword_ideas(request=req):
+                k = idea.text.lower()
+                if k in rows:
+                    continue
+                m = idea.keyword_idea_metrics
+                rows[k] = {
+                    "keyword": idea.text, "avg_monthly_searches": m.avg_monthly_searches,
+                    "competition": m.competition.name, "competition_index": m.competition_index,
+                    "low_bid": _dollars(m.low_top_of_page_bid_micros),
+                    "high_bid": _dollars(m.high_top_of_page_bid_micros)}
+                if len(rows) >= limit * 4:
+                    break
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Google Ads API error: " + str(e)}
+    out = []
+    for r in rows.values():
+        vol = r["avg_monthly_searches"] or 0
+        if vol < min_searches:
+            continue
+        intent = _intent_score(r["keyword"])
+        r = dict(r)
+        r["intent_score"] = intent
+        r["priority"] = _priority(vol, intent, r["competition_index"])
+        out.append(r)
+    out.sort(key=lambda x: (-x["priority"], -(x["avg_monthly_searches"] or 0)))
+    out = out[:limit]
+    result = {"locations": human, "count": len(out), "keywords": out}
+    if as_csv:
+        result["csv"] = _csv(out, ["keyword", "avg_monthly_searches", "competition",
+                                   "intent_score", "priority", "low_bid", "high_bid"])
+    return result
 
 
 @mcp.tool()
