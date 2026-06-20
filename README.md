@@ -37,7 +37,8 @@ To register without the installer (already have a venv or Python): `python regis
 **Keyword research (bulk + locations)**
 - `keyword_research` — one call: expand seed keywords and/or pull metrics for a
   keyword list, across many places at once, ranked by search volume and
-  commercial intent, returned as CSV. Chunks under the API's 20-seed cap.
+  commercial intent and returned as decision-ready rows you act on in the same
+  chat turn (no CSV export or upload). Chunks under the API's 20-seed cap.
 - `resolve_locations` — turn town/city/state names into Google Ads geo target ids
   with reach, so you target specific areas instead of the whole country
 - `add_location_set` / `list_location_sets` — save a reusable named list of target

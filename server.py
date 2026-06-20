@@ -238,17 +238,6 @@ def _priority(volume, intent, comp_index) -> float:
     return round((volume or 0) * (1 + max(0, intent)) * (1.0 - 0.3 * comp), 1)
 
 
-def _csv(rows: list, columns: list) -> str:
-    import csv as _csvmod
-    import io
-    buf = io.StringIO()
-    w = _csvmod.writer(buf)
-    w.writerow(columns)
-    for r in rows:
-        w.writerow([r.get(c, "") for c in columns])
-    return buf.getvalue()
-
-
 def _resolve_geo_targets(client, locations, country_code="US"):
     """Map location items (each a numeric geo id, or a place name like
     'Austin, Texas') to geoTargetConstants resource names. Returns
@@ -505,13 +494,16 @@ def list_location_sets() -> dict:
 def keyword_research(seed_keywords: list[str] | None = None, keywords: list[str] | None = None,
                      locations: list[str] | None = None, location_set: str | None = None,
                      geo: str = "US", language: str = "en", country_code: str = "US",
-                     limit: int = 500, min_searches: int = 0, as_csv: bool = True) -> dict:
-    """Bulk keyword research in one call, for the keyword-planner workflow. Expand
-    `seed_keywords` into ideas and/or pull metrics for an explicit `keywords` list,
-    across many places at once (`locations` names/ids or a saved `location_set`,
-    else `geo`), then rank by search volume and commercial intent and return a CSV
-    you can paste straight back into chat. Chunks under the Google Ads 20-seed cap,
-    so you can pass a long list instead of entering keywords one at a time."""
+                     limit: int = 500, min_searches: int = 0) -> dict:
+    """Bulk keyword research in one call, the whole keyword-planner workflow without
+    leaving chat. Expand `seed_keywords` into ideas and/or pull metrics for an
+    explicit `keywords` list, across many places at once (`locations` names/ids or
+    a saved `location_set`, else `geo`), then rank by search volume and commercial
+    intent. Returns decision-ready structured rows (each with avg_monthly_searches,
+    competition, intent_score, and a priority that floats the high-intent keywords
+    getting volume to the top), so you decide in the same turn, no CSV export or
+    upload. Chunks under the Google Ads 20-seed cap, so pass a long list at once
+    instead of entering keywords one at a time."""
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -574,11 +566,7 @@ def keyword_research(seed_keywords: list[str] | None = None, keywords: list[str]
         out.append(r)
     out.sort(key=lambda x: (-x["priority"], -(x["avg_monthly_searches"] or 0)))
     out = out[:limit]
-    result = {"locations": human, "count": len(out), "keywords": out}
-    if as_csv:
-        result["csv"] = _csv(out, ["keyword", "avg_monthly_searches", "competition",
-                                   "intent_score", "priority", "low_bid", "high_bid"])
-    return result
+    return {"locations": human, "count": len(out), "keywords": out}
 
 
 @mcp.tool()
