@@ -1,7 +1,27 @@
 # Setup walkthrough
 
-This server is four independent platforms. You only set up the ones you use, in
-any order. Two tools work with zero setup, so you can confirm the server runs
+## Easiest: set up from chat (no .env editing)
+
+You do not have to touch the `.env` file. After installing, ask the assistant to
+run `setup_instructions`, then connect each platform by pasting your credentials
+into chat:
+
+- "connect google ads oauth" (paste OAuth client id + secret; a browser opens),
+  then "connect google ads" (paste developer token + 10-digit account id)
+- "connect meta" (paste the access token)
+- "connect analytics" (paste the service-account JSON contents; covers GA4 and
+  Search Console)
+- "set pagespeed key" (optional, paste a free key)
+
+Each writes the `.env` for you, applies it without a restart, and confirms by
+pinging the platform. The rest of this document is the manual reference for where
+those values come from; you still need to obtain them from Google and Meta, but
+you paste them into chat rather than editing files.
+
+---
+
+This server is several independent platforms. You only set up the ones you use, in
+any order. Several tools work with zero setup, so you can confirm the server runs
 before touching any credentials.
 
 At every step you can check progress with the doctor:

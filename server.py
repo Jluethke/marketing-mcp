@@ -1304,6 +1304,175 @@ def clients_overview(days: int = 30, clients: list[str] | None = None) -> dict:
     return {"days": days, "per_client": rows, "rollup": roll}
 
 
+# ==== connect from chat (no .env editing) ==================================
+
+def _env_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+
+
+def _write_env(updates: dict) -> None:
+    """Merge key=value updates into the .env next to this server AND into the live
+    process environment, so a credential set from chat persists for next time and
+    takes effect immediately, without editing a file or restarting."""
+    path = _env_path()
+    lines, seen = [], set()
+    if os.path.exists(path):
+        for raw in open(path, encoding="utf-8").read().splitlines():
+            key = raw.split("=", 1)[0].strip()
+            if key in updates:
+                lines.append("%s=%s" % (key, updates[key]))
+                seen.add(key)
+            else:
+                lines.append(raw)
+    for k, v in updates.items():
+        if k not in seen:
+            lines.append("%s=%s" % (k, v))
+    open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    for k, v in updates.items():
+        os.environ[k] = str(v)
+
+
+def _mask(v: str) -> str:
+    v = str(v)
+    return ("*" * max(0, len(v) - 4) + v[-4:]) if len(v) > 4 else "****"
+
+
+@mcp.tool()
+def setup_instructions(platform: str | None = None) -> dict:
+    """Plain-language, no-terminal setup you can do entirely in chat. Returns what
+    to get from each platform and the exact phrase to say to connect it. Call with
+    a platform (google_ads, meta, analytics, pagespeed) for one, or no argument for
+    all. The .env file is written for you; you never edit it by hand."""
+    steps = {
+        "works_now": "seo_audit, autocomplete_suggestions, cluster_keywords, and trend_index "
+                     "need no setup. pagespeed works too (a free key raises its quota).",
+        "google_ads": [
+            "In Google Ads -> Tools -> API Center, apply for a developer token (basic access; "
+            "the account needs a payment method on file).",
+            "In Google Cloud -> APIs & Services -> Credentials, create an OAuth client of type "
+            "Desktop. Copy its client id and client secret.",
+            "Say: 'connect google ads oauth' and paste the client id and client secret. A browser "
+            "opens; approve with the Google account that has Ads access.",
+            "Say: 'connect google ads' and paste your developer token and your 10-digit Ads "
+            "customer id. Done.",
+        ],
+        "meta": [
+            "At developers.facebook.com create an app, add the Marketing API, and generate an "
+            "access token with the ads_read permission.",
+            "Say: 'connect meta' and paste the access token.",
+        ],
+        "analytics": [
+            "In Google Cloud create a service account and download its JSON key. Enable the "
+            "Analytics Data API and the Search Console API on the project.",
+            "Say: 'connect analytics' and paste the entire contents of the JSON key file.",
+            "Add the service-account email it gives back as a Viewer on your GA4 property, and as "
+            "a user on your Search Console property.",
+        ],
+        "pagespeed": [
+            "Optional. Create a free API key in Google Cloud, then say: 'set pagespeed key' and "
+            "paste it.",
+        ],
+    }
+    if platform and platform in steps:
+        return {platform: steps[platform]}
+    return steps
+
+
+@mcp.tool()
+def connect_google_ads(developer_token: str, customer_id: str, client_id: str = "",
+                       client_secret: str = "", refresh_token: str = "",
+                       login_customer_id: str = "") -> dict:
+    """Connect Google Ads from chat (no .env editing). Saves the credentials to the
+    local .env, applies them immediately, and confirms by listing accounts. You can
+    omit client_id/secret/refresh_token if you already ran connect_google_ads_oauth.
+    customer_id is the 10-digit Ads account id."""
+    up = {"GOOGLE_ADS_DEVELOPER_TOKEN": developer_token,
+          "GOOGLE_ADS_CUSTOMER_ID": str(customer_id).replace("-", "")}
+    if client_id:
+        up["GOOGLE_ADS_CLIENT_ID"] = client_id
+    if client_secret:
+        up["GOOGLE_ADS_CLIENT_SECRET"] = client_secret
+    if refresh_token:
+        up["GOOGLE_ADS_REFRESH_TOKEN"] = refresh_token
+    if login_customer_id:
+        up["GOOGLE_ADS_LOGIN_CUSTOMER_ID"] = str(login_customer_id).replace("-", "")
+    _write_env(up)
+    chk = list_ads_accounts()
+    ok = "accounts" in chk
+    return {"saved": True, "developer_token": _mask(developer_token),
+            "customer_id": up["GOOGLE_ADS_CUSTOMER_ID"], "verified": ok,
+            "check": ("ok, %d accounts reachable" % len(chk["accounts"])) if ok
+                     else chk.get("needs_setup") or chk.get("error")}
+
+
+@mcp.tool()
+def connect_google_ads_oauth(client_id: str, client_secret: str) -> dict:
+    """Get the Google Ads refresh token by approving in a browser, with no terminal
+    command. A browser window opens; approve with the Google account that has Ads
+    access, and the client id, secret, and refresh token are saved to .env. Then
+    call connect_google_ads with your developer token and customer id."""
+    try:
+        from google_auth_oauthlib.flow import InstalledAppFlow
+    except ImportError:
+        return {"error": "google-auth-oauthlib not installed. Run: pip install google-auth-oauthlib"}
+    try:
+        flow = InstalledAppFlow.from_client_config(
+            {"installed": {"client_id": client_id, "client_secret": client_secret,
+                           "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                           "token_uri": "https://oauth2.googleapis.com/token",
+                           "redirect_uris": ["http://localhost"]}},
+            scopes=["https://www.googleapis.com/auth/adwords"])
+        creds = flow.run_local_server(port=0, prompt="consent")
+    except Exception as e:  # noqa: BLE001
+        return {"error": "OAuth failed: " + str(e)}
+    if not creds.refresh_token:
+        return {"error": "No refresh token returned. Revoke the app's prior access and retry."}
+    _write_env({"GOOGLE_ADS_CLIENT_ID": client_id, "GOOGLE_ADS_CLIENT_SECRET": client_secret,
+                "GOOGLE_ADS_REFRESH_TOKEN": creds.refresh_token})
+    return {"saved": True, "refresh_token": _mask(creds.refresh_token),
+            "next": "say 'connect google ads' and paste your developer token and 10-digit customer id"}
+
+
+@mcp.tool()
+def connect_meta(access_token: str) -> dict:
+    """Connect Meta Ads from chat (no .env editing). Saves the access token, applies
+    it immediately, and confirms by listing ad accounts."""
+    _write_env({"META_ACCESS_TOKEN": access_token})
+    chk = meta_list_ad_accounts()
+    ok = "accounts" in chk
+    return {"saved": True, "token": _mask(access_token), "verified": ok,
+            "check": ("ok, %d ad accounts reachable" % len(chk["accounts"])) if ok
+                     else chk.get("needs_setup") or chk.get("error")}
+
+
+@mcp.tool()
+def connect_analytics(service_account_json: str) -> dict:
+    """Connect GA4 and Search Console from chat by pasting the service-account JSON
+    key contents (no file handling). Writes the key to a local file, points
+    GOOGLE_APPLICATION_CREDENTIALS at it, and returns the service-account email to
+    add as a Viewer on the GA4 property and a user on the Search Console property."""
+    try:
+        data = json.loads(service_account_json)
+        email = data.get("client_email", "")
+    except Exception as e:  # noqa: BLE001
+        return {"error": "that does not look like valid service-account JSON: " + str(e)}
+    if not email:
+        return {"error": "no client_email in the JSON; paste the full service-account key file"}
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ga4-service-account.json")
+    open(path, "w", encoding="utf-8").write(service_account_json)
+    _write_env({"GOOGLE_APPLICATION_CREDENTIALS": path})
+    return {"saved": True, "service_account_email": email,
+            "next": "add %s as a Viewer on your GA4 property, and as a user on your Search "
+                    "Console property" % email}
+
+
+@mcp.tool()
+def set_pagespeed_key(api_key: str) -> dict:
+    """Save a free PageSpeed Insights API key from chat (raises the pagespeed quota)."""
+    _write_env({"PAGESPEED_API_KEY": api_key})
+    return {"saved": True, "key": _mask(api_key)}
+
+
 # ==== setup / health check ================================================
 
 def _has_module(mod: str) -> bool:

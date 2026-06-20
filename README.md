@@ -32,7 +32,27 @@ Code). Restart Claude, then try a no-auth tool: "use autocomplete_suggestions fo
 
 To register without the installer (already have a venv or Python): `python register.py`.
 
-## Tools (37)
+## Connecting the data platforms (from chat, no file editing)
+
+You do not edit any `.env` file by hand. After the install, just talk to the
+assistant. Ask it to run `setup_instructions` for the steps, then connect each
+platform by pasting your credentials into chat:
+
+- Google Ads: say "connect google ads oauth" and paste your OAuth client id and
+  secret (a browser opens to approve), then "connect google ads" with your
+  developer token and 10-digit account id.
+- Meta Ads: say "connect meta" and paste your access token.
+- GA4 + Search Console: say "connect analytics" and paste the contents of your
+  service-account JSON key.
+- PageSpeed (optional): "set pagespeed key" and paste a free API key.
+
+Each `connect_*` tool writes your `.env`, applies it immediately (no restart), and
+confirms by pinging the platform. Tokens are masked in the reply and `.env` is
+gitignored, so nothing is echoed in full or committed. The no-setup tools
+(`seo_audit`, `autocomplete_suggestions`, `cluster_keywords`, `trend_index`) work
+before you connect anything.
+
+## Tools (43)
 
 **SEO / site (no setup; PageSpeed is a free Google API)**
 - `seo_audit` — fetch a URL and grade it: title, meta description, headings, word
