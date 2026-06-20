@@ -5,3 +5,5 @@ google-ads>=24.0.0
 google-auth-oauthlib>=1.2.0
 pytrends>=4.9.2
 google-analytics-data>=0.18.0
+google-api-python-client>=2.100
+beautifulsoup4>=4.12

@@ -650,6 +650,130 @@ def cluster_keywords(keywords: list[str], max_clusters: int = 0) -> dict:
     return {"n_clusters": len(out), "clusters": out}
 
 
+# ==== SITE / SEO (no auth; PageSpeed is a free Google API) ==================
+
+@mcp.tool()
+def seo_audit(url: str) -> dict:
+    """On-page SEO audit of a URL (no credentials). Fetches the page and reports
+    title, meta description, headings, word count, canonical, robots, open-graph
+    and twitter tags, JSON-LD schema presence, images missing alt text, internal
+    and external link counts, and a list of issues found."""
+    import httpx
+    from urllib.parse import urlparse
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
+    try:
+        r = httpx.get(url, timeout=20.0, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; marketing-mcp/1.0)"})
+    except Exception as e:  # noqa: BLE001
+        return {"error": "fetch failed: " + str(e)}
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    def meta(name=None, prop=None):
+        t = soup.find("meta", attrs={"name": name} if name else {"property": prop})
+        return (t.get("content") or "").strip() if t and t.get("content") else None
+
+    title = soup.title.string.strip() if (soup.title and soup.title.string) else None
+    desc = meta(name="description")
+    h1 = [h.get_text(strip=True) for h in soup.find_all("h1")]
+    words = len(soup.get_text(" ", strip=True).split())
+    canon = soup.find("link", rel="canonical")
+    canonical = canon.get("href") if canon else None
+    imgs = soup.find_all("img")
+    imgs_no_alt = sum(1 for i in imgs if not (i.get("alt") or "").strip())
+    host = urlparse(str(r.url)).netloc
+    internal = external = 0
+    for a in soup.find_all("a", href=True):
+        h = a["href"]
+        if h.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        netloc = urlparse(h).netloc
+        if netloc in ("", host):
+            internal += 1
+        else:
+            external += 1
+    issues = []
+    if not title:
+        issues.append("missing <title>")
+    elif len(title) > 60:
+        issues.append("title too long (%d chars; aim <=60)" % len(title))
+    elif len(title) < 15:
+        issues.append("title very short (%d chars)" % len(title))
+    if not desc:
+        issues.append("missing meta description")
+    elif len(desc) > 160:
+        issues.append("meta description too long (%d chars; aim <=160)" % len(desc))
+    if len(h1) == 0:
+        issues.append("no H1")
+    elif len(h1) > 1:
+        issues.append("multiple H1s (%d)" % len(h1))
+    if words < 300:
+        issues.append("thin content (%d words)" % words)
+    if not canonical:
+        issues.append("no canonical link")
+    if imgs_no_alt:
+        issues.append("%d image(s) missing alt text" % imgs_no_alt)
+    if not meta(prop="og:title"):
+        issues.append("no open-graph tags")
+    return {
+        "url": str(r.url), "status_code": r.status_code,
+        "title": title, "title_length": len(title) if title else 0,
+        "meta_description": desc, "meta_description_length": len(desc) if desc else 0,
+        "h1": h1, "h2_count": len(soup.find_all("h2")), "word_count": words,
+        "canonical": canonical, "robots": meta(name="robots"),
+        "lang": soup.html.get("lang") if soup.html else None,
+        "has_viewport": bool(meta(name="viewport")),
+        "open_graph": bool(meta(prop="og:title")),
+        "twitter_card": bool(meta(name="twitter:card")),
+        "schema_jsonld_blocks": len(soup.find_all("script", attrs={"type": "application/ld+json"})),
+        "images": len(imgs), "images_missing_alt": imgs_no_alt,
+        "internal_links": internal, "external_links": external,
+        "issues": issues,
+    }
+
+
+@mcp.tool()
+def pagespeed(url: str, strategy: str = "mobile") -> dict:
+    """Google PageSpeed Insights (Lighthouse) for a URL: performance, SEO,
+    accessibility, and best-practices scores (0-100) plus Core Web Vitals
+    (LCP, CLS, TBT, INP). strategy = mobile or desktop. No credentials; set
+    PAGESPEED_API_KEY for higher quota."""
+    import httpx
+    params = [("url", url), ("strategy", strategy)]
+    for c in ("performance", "seo", "accessibility", "best-practices"):
+        params.append(("category", c))
+    key = os.environ.get("PAGESPEED_API_KEY")
+    if key:
+        params.append(("key", key))
+    try:
+        d = httpx.get("https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+                      params=params, timeout=60.0).json()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "pagespeed request failed: " + str(e)}
+    if "error" in d:
+        return {"error": "PageSpeed API error: " + str(d["error"].get("message", d["error"]))}
+    lh = d.get("lighthouseResult", {})
+    scores = {k: round((v.get("score") or 0) * 100) for k, v in lh.get("categories", {}).items()}
+    audits = lh.get("audits", {})
+
+    def disp(aid):
+        return audits.get(aid, {}).get("displayValue")
+
+    cwv = {"LCP": disp("largest-contentful-paint"), "CLS": disp("cumulative-layout-shift"),
+           "TBT": disp("total-blocking-time"), "INP": disp("interaction-to-next-paint"),
+           "FCP": disp("first-contentful-paint"), "speed_index": disp("speed-index")}
+    field = {}
+    for k, label in (("LARGEST_CONTENTFUL_PAINT_MS", "LCP"), ("CUMULATIVE_LAYOUT_SHIFT_SCORE", "CLS"),
+                     ("INTERACTION_TO_NEXT_PAINT", "INP")):
+        m = d.get("loadingExperience", {}).get("metrics", {}).get(k)
+        if m:
+            field[label] = m.get("category")
+    return {"url": url, "strategy": strategy, "scores": scores,
+            "core_web_vitals": cwv, "field_data_real_users": field}
+
+
 # ==== GOOGLE ADS reporting + management ====================================
 
 @mcp.tool()
@@ -861,6 +985,38 @@ def meta_set_campaign_status(campaign_id: str, status: str = "PAUSED") -> dict:
     return {"campaign_id": campaign_id, "status": status.upper(), "result": j}
 
 
+@mcp.tool()
+def meta_ad_library(search_terms: str | None = None, page_ids: list[str] | None = None,
+                    countries: list[str] | None = None, active_status: str = "ACTIVE",
+                    limit: int = 25) -> dict:
+    """Search Meta's public Ad Library for running ads, by keyword (`search_terms`)
+    or advertiser page id (`page_ids`). Returns the advertiser, creative text,
+    platforms, run dates, and a snapshot url, for competitor ad intel. Uses
+    META_ACCESS_TOKEN; `countries` defaults to ['US']. active_status =
+    ACTIVE | INACTIVE | ALL. Coverage of non-political ads is limited by Meta to
+    some regions and may require app identity verification."""
+    if not search_terms and not page_ids:
+        return {"error": "provide search_terms or page_ids"}
+    params = {
+        "ad_reached_countries": json.dumps(countries or ["US"]),
+        "ad_active_status": active_status,
+        "ad_type": "ALL",
+        "fields": ("id,page_name,ad_creative_bodies,ad_creative_link_titles,"
+                   "ad_creative_link_captions,publisher_platforms,"
+                   "ad_delivery_start_time,ad_delivery_stop_time,ad_snapshot_url"),
+        "limit": limit,
+    }
+    if search_terms:
+        params["search_terms"] = search_terms
+    if page_ids:
+        params["search_page_ids"] = json.dumps([str(p) for p in page_ids])
+    try:
+        data = _meta_get("ads_archive", params)
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    return {"count": len(data.get("data", [])), "ads": data.get("data", [])}
+
+
 # ==== GA4 analytics ========================================================
 
 def _ga4_report(property_id, dimensions, metrics, start_date, end_date, limit, realtime=False):
@@ -960,6 +1116,80 @@ def ga4_top_pages(property_id: str | None = None, days: int = 28, limit: int = 2
         return {"needs_setup": str(e)}
     except Exception as e:  # noqa: BLE001
         return {"error": "GA4 API error: " + str(e)}
+
+
+# ==== GOOGLE SEARCH CONSOLE (organic search) ===============================
+
+def _gsc_service():
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        raise RuntimeError("google-api-python-client not installed. Run: pip install google-api-python-client")
+    path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if not path:
+        raise RuntimeError("Set GOOGLE_APPLICATION_CREDENTIALS to a service-account json (the same key "
+                           "as GA4) and add that service account to the Search Console property. "
+                           "See README.md (Setup -> Search Console).")
+    creds = service_account.Credentials.from_service_account_file(
+        path, scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+    return build("searchconsole", "v1", credentials=creds, cache_discovery=False)
+
+
+@mcp.tool()
+def gsc_list_sites() -> dict:
+    """List the sites the configured service account can read in Google Search
+    Console. If empty, add the service-account email as a user on the property."""
+    try:
+        svc = _gsc_service()
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    try:
+        resp = svc.sites().list().execute()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Search Console API error: " + str(e)}
+    return {"sites": [s.get("siteUrl") for s in resp.get("siteEntry", [])]}
+
+
+@mcp.tool()
+def gsc_search_analytics(site_url: str, days: int = 28, dimensions: list[str] | None = None,
+                         limit: int = 100) -> dict:
+    """Google Search Console performance for a verified site: clicks, impressions,
+    CTR, and average position, grouped by `dimensions` (query, page, country,
+    device, date) over the last N days. site_url is the exact property string,
+    e.g. 'https://example.com/' or 'sc-domain:example.com'."""
+    try:
+        svc = _gsc_service()
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    start, end = _date_range(days)
+    dims = dimensions or ["query"]
+    body = {"startDate": start, "endDate": end, "dimensions": dims, "rowLimit": limit}
+    try:
+        resp = svc.searchanalytics().query(siteUrl=site_url, body=body).execute()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Search Console API error: " + str(e)}
+    rows = []
+    for r in resp.get("rows", []):
+        row = {dims[i]: r["keys"][i] for i in range(len(dims))}
+        row.update({"clicks": r.get("clicks"), "impressions": r.get("impressions"),
+                    "ctr": round(r.get("ctr", 0), 4), "position": round(r.get("position", 0), 1)})
+        rows.append(row)
+    return {"site": site_url, "days": days, "dimensions": dims, "count": len(rows), "rows": rows}
+
+
+@mcp.tool()
+def gsc_top_queries(site_url: str, days: int = 28, limit: int = 50) -> dict:
+    """Top organic search queries bringing clicks and impressions to a site (Google
+    Search Console), over the last N days."""
+    return gsc_search_analytics(site_url, days, ["query"], limit)
+
+
+@mcp.tool()
+def gsc_top_pages(site_url: str, days: int = 28, limit: int = 50) -> dict:
+    """Top landing pages by organic clicks and impressions (Google Search Console),
+    over the last N days."""
+    return gsc_search_analytics(site_url, days, ["page"], limit)
 
 
 # ==== clients: multi-account (granular + rollup) ===========================
@@ -1113,11 +1343,22 @@ def _platform_status(live: bool = False) -> dict:
         ga4["next_step"] = ("pip install google-analytics-data" if not ga4["library_installed"]
                             else "set GOOGLE_APPLICATION_CREDENTIALS to an existing service-account json")
 
+    gsc_lib = _has_module("googleapiclient")
+    gsc = {"library_installed": gsc_lib, "credentials_file_exists": bool(cred and os.path.exists(cred))}
+    gsc["ready"] = gsc_lib and gsc["credentials_file_exists"]
+    if not gsc["ready"]:
+        gsc["next_step"] = ("pip install google-api-python-client" if not gsc_lib
+                            else "set GOOGLE_APPLICATION_CREDENTIALS (same key as GA4) and add the "
+                                 "service account to the Search Console property")
+
+    bs4_ok = _has_module("bs4")
     pyt = _has_module("pytrends")
     status = {
         "keyword_no_auth": {"ready": True, "tools": ["autocomplete_suggestions", "cluster_keywords"]},
         "trends": {"ready": pyt, "next_step": None if pyt else "pip install pytrends"},
-        "google_ads": ga, "meta_ads": meta, "ga4": ga4,
+        "site_audit": {"ready": bs4_ok, "tools": ["seo_audit", "pagespeed"],
+                       "next_step": None if bs4_ok else "pip install beautifulsoup4"},
+        "google_ads": ga, "meta_ads": meta, "ga4": ga4, "search_console": gsc,
     }
     if live:
         if ga["ready"]:

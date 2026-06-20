@@ -32,7 +32,21 @@ Code). Restart Claude, then try a no-auth tool: "use autocomplete_suggestions fo
 
 To register without the installer (already have a venv or Python): `python register.py`.
 
-## Tools (30)
+## Tools (37)
+
+**SEO / site (no setup; PageSpeed is a free Google API)**
+- `seo_audit` — fetch a URL and grade it: title, meta description, headings, word
+  count, canonical, og/twitter tags, JSON-LD schema, images missing alt, link
+  counts, and an issues list. Zero setup.
+- `pagespeed` — Lighthouse performance / SEO / accessibility scores plus Core Web
+  Vitals (LCP, CLS, INP) for a URL. Set `PAGESPEED_API_KEY` (free) for quota.
+
+**Search Console (organic search)**
+- `gsc_top_queries` / `gsc_top_pages` — top organic queries and pages by clicks,
+  impressions, CTR, and position over N days
+- `gsc_search_analytics` — any dimensions (query, page, country, device, date)
+- `gsc_list_sites` — properties the service account can read
+- (reuses the GA4 service-account credential; add it to the Search Console property)
 
 **Keyword research (bulk + locations)**
 - `keyword_research` — one call: expand seed keywords and/or pull metrics for a
@@ -70,6 +84,8 @@ To register without the installer (already have a venv or Python): `python regis
 **Meta Ads (reporting + management)**
 - `meta_list_ad_accounts`, `meta_list_campaigns`, `meta_list_adsets`, `meta_list_ads`
 - `meta_insights` — spend / impressions / clicks / ctr / cpc / actions at any level
+- `meta_ad_library` — search Meta's public Ad Library for competitor ads (by keyword
+  or advertiser page id): creative text, platforms, run dates, snapshot url
 - `meta_set_campaign_status` — pause / activate a campaign
 
 **GA4 (analytics)**

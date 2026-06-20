@@ -121,6 +121,20 @@ python doctor.py
 `ga4` should read READY (the GA4 live check needs a property id, so confirm it by
 calling `ga4_run_report` with your property id once wired in).
 
+### Step 3b - Search Console (same key)
+
+The same service account unlocks Google Search Console (organic search). Enable
+the Search Console API on the project, then in Search Console (Settings -> Users
+and permissions) add the service-account email as a user on the property. Enable
+the API at console.cloud.google.com (APIs & Services). The `gsc_*` tools take the
+property string as `site_url` (e.g. `https://example.com/` or `sc-domain:example.com`).
+
+### No-setup tools
+
+`seo_audit` and `pagespeed` need no credentials and work immediately. `pagespeed`
+shares a small keyless quota; set `PAGESPEED_API_KEY` (a free Google Cloud API
+key) for reliable use.
+
 ---
 
 ## Step 4 - Wire into Claude

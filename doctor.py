@@ -14,7 +14,8 @@ def main() -> int:
     live = "--live" in sys.argv
     st = server._platform_status(live)
     print("Marketing MCP - setup doctor\n")
-    order = ["keyword_no_auth", "trends", "google_ads", "meta_ads", "ga4"]
+    order = ["keyword_no_auth", "trends", "site_audit", "google_ads", "meta_ads",
+             "ga4", "search_console"]
     for plat in order:
         v = st[plat]
         box = "x" if v.get("ready") else " "
