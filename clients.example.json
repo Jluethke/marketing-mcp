@@ -1,0 +1,15 @@
+{
+  "default": "example_client",
+  "clients": {
+    "example_client": {
+      "label": "Example Client Inc",
+      "google_ads_customer_id": "1234567890",
+      "meta_ad_account_id": "act_1234567890",
+      "ga4_property_id": "123456789"
+    },
+    "second_brand": {
+      "label": "Second Brand",
+      "ga4_property_id": "987654321"
+    }
+  }
+}

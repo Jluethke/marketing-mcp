@@ -1,0 +1,4 @@
+# Normalize line endings so shell scripts work on macOS/Linux from a clone.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary
