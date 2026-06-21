@@ -11,7 +11,7 @@ credentials are present, and several tools work with no setup at all.
 **macOS / Linux** (needs Python 3.10+; on macOS `brew install python@3.11`):
 
 ```
-git clone <REPO_URL> marketing-mcp
+git clone https://github.com/Jluethke/marketing-mcp.git
 cd marketing-mcp
 bash install.sh
 ```
@@ -19,7 +19,7 @@ bash install.sh
 **Windows** (needs Python 3.10+ from python.org):
 
 ```
-git clone <REPO_URL> marketing-mcp
+git clone https://github.com/Jluethke/marketing-mcp.git
 cd marketing-mcp
 install.bat
 ```
