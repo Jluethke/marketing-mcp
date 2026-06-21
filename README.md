@@ -1,8 +1,10 @@
 # Marketing MCP
 
 One MCP server that combines Google Ads (keyword research, GAQL reporting, and
-campaign management), Meta Ads, GA4, Google Search Console, on-page SEO, and
-PageSpeed, plus a multi-client rollup. Works with Claude Desktop and Claude Code.
+campaign management), Meta Ads, GA4, Google Search Console, and a no-setup
+SEO/site toolkit (on-page audit, site crawl, broken-link and structured-data
+checks, technical-health check, PageSpeed, one-number score), plus a multi-client
+rollup. Works with Claude Desktop and Claude Code.
 Each platform is independent: a tool returns a clear "needs setup" note until its
 credentials are present, and several tools work with no setup at all.
 
@@ -36,8 +38,18 @@ To register without the installer (you already have a venv or Python):
 These tools work the moment the server is installed, with no accounts or keys.
 Start here to confirm it runs, before connecting anything:
 
-- `seo_audit` — paste a URL, get an on-page audit (title, meta, headings, word
-  count, links, images missing alt, issues). Try: "seo_audit for https://example.com".
+- `seo_score` — paste a URL, get one 0-100 health score and letter grade with the
+  top fixes. The fastest "how's this page doing". Try: "seo_score for https://example.com".
+- `seo_audit` — full on-page audit (title, meta, headings, word count, links,
+  images missing alt, issues). Try: "seo_audit for https://example.com".
+- `crawl_site` — crawl up to N pages and aggregate the most common issues across
+  the site (the multi-page version of seo_audit).
+- `check_links` — find broken (4xx/5xx) links on a page.
+- `content_analysis` — Flesch readability, keyword density, heading outline; pass a
+  focus keyword to see where it appears.
+- `http_check` — redirect chain, HTTPS, security headers, response time, mixed content.
+- `validate_schema` — open the page's JSON-LD and flag missing recommended fields.
+- `robots_sitemap` — read robots.txt and discover the sitemap's URLs.
 - `autocomplete_suggestions` — Google autocomplete for a phrase. Try:
   "autocomplete_suggestions for 'plumber near me'".
 - `cluster_keywords` — group a keyword list into themes.
@@ -154,7 +166,9 @@ ranges (for example 1K-10K), not exact numbers. That is Google's limit.
    A `.json` file downloads. Note the service-account email (it looks like
    `name@project-id.iam.gserviceaccount.com`).
 5. In GA4: Admin -> Property Access Management -> add that email as a Viewer.
-6. In Search Console: Settings -> Users and permissions -> add that email as a user.
+6. In Search Console: Settings -> Users and permissions -> add that email as a user
+   (Restricted is enough for reading and URL inspection; choose Full only if you
+   want `gsc_submit_sitemap` to be able to submit sitemaps).
 7. Set `GOOGLE_APPLICATION_CREDENTIALS` to the full path of the downloaded JSON
    (in chat, "connect analytics" + paste the file's contents does this for you).
 
@@ -171,12 +185,26 @@ To use the tools you also need:
    Insights API".
 2. APIs & Services -> Credentials -> Create Credentials -> API key. Copy it.
 
-## Tools (43)
+## Tools (53)
 
 **SEO / site (no setup; PageSpeed is a free Google API)**
+- `seo_score` — one 0-100 health score and letter grade, rolled up from the
+  on-page audit, technical health, and readability, with the top fixes. Zero setup.
 - `seo_audit` — fetch a URL and grade it: title, meta description, headings, word
   count, canonical, og/twitter tags, JSON-LD schema, images missing alt, link
   counts, and an issues list. Zero setup.
+- `crawl_site` — crawl up to `max_pages` (sitemap-seeded or link-following,
+  respecting robots.txt) and aggregate the most common issues site-wide.
+- `check_links` — request every link on a page and report the broken (4xx/5xx)
+  ones; scope = all / internal / external.
+- `content_analysis` — Flesch reading ease, word/sentence counts, keyword density,
+  heading outline, thin-content flag, and optional focus-keyword placement.
+- `http_check` — redirect chain, HTTPS enforcement, security headers (HSTS, CSP,
+  X-Content-Type-Options, X-Frame-Options), response time, server, mixed content.
+- `validate_schema` — parse the page's JSON-LD, list each `@type`, flag invalid
+  JSON, and report missing recommended properties for common schema types.
+- `robots_sitemap` — parse robots.txt (Disallow rules + Sitemap directives) and
+  walk the XML sitemap (handles a sitemap index) to count and sample page URLs.
 - `pagespeed` — Lighthouse performance / SEO / accessibility scores plus Core Web
   Vitals (LCP, CLS, INP) for a URL. Set `PAGESPEED_API_KEY` (free) for quota.
 
@@ -185,6 +213,10 @@ To use the tools you also need:
   impressions, CTR, and position over N days
 - `gsc_search_analytics` — any dimensions (query, page, country, device, date)
 - `gsc_list_sites` — properties the service account can read
+- `gsc_inspect_url` — URL Inspection: is a page indexed, its coverage state, last
+  crawl time, Google-chosen canonical, mobile usability, rich-results status
+- `gsc_list_sitemaps` / `gsc_submit_sitemap` — list submitted sitemaps with their
+  errors/warnings, and submit a new sitemap (submit needs full-user permission)
 
 **Keyword research (bulk + locations)**
 - `keyword_research` — one call: expand seed keywords and/or pull metrics for a

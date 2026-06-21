@@ -31,6 +31,21 @@ keyword research:
     ga4_realtime                realtime report
     ga4_traffic_sources / ga4_top_pages   convenience reports
 
+  SEARCH CONSOLE (organic search; Search Console API, same key as GA4)
+    gsc_top_queries / gsc_top_pages / gsc_search_analytics / gsc_list_sites
+    gsc_inspect_url             URL Inspection: indexed? coverage, last crawl
+    gsc_list_sitemaps / gsc_submit_sitemap
+
+  SEO / SITE (no auth; httpx + beautifulsoup4)
+    seo_audit / pagespeed       on-page audit; Lighthouse scores + Core Web Vitals
+    http_check                  redirect chain, HTTPS, security headers, timing
+    content_analysis            Flesch readability, keyword density, outline
+    validate_schema             JSON-LD structured-data validation
+    robots_sitemap              robots.txt rules + sitemap URL discovery
+    crawl_site                  multi-page crawl + aggregated issues
+    check_links                 broken-link checker
+    seo_score                   one 0-100 health score + grade
+
 Auth'd tools return a clear setup error until their credentials are configured;
 the no-auth tools run with no setup. Run: python server.py  (stdio transport).
 """
@@ -39,6 +54,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 from collections import Counter, defaultdict
 
 from mcp.server.fastmcp import FastMCP
@@ -58,6 +74,7 @@ mcp = FastMCP("marketing-mcp")
 _GEO = {"US": "2840", "CA": "2124", "GB": "2826", "UK": "2826", "AU": "2036",
         "IN": "2356", "DE": "2276", "FR": "2250", "ES": "2724", "IE": "2372"}
 _LANG = {"en": "1000", "es": "1003", "fr": "1002", "de": "1001", "pt": "1014", "it": "1004"}
+_UA = "Mozilla/5.0 (compatible; marketing-mcp/1.0; +https://github.com/Jluethke/marketing-mcp)"
 
 
 def _geo_res(geo: str) -> str:
@@ -658,18 +675,30 @@ def seo_audit(url: str) -> dict:
     title, meta description, headings, word count, canonical, robots, open-graph
     and twitter tags, JSON-LD schema presence, images missing alt text, internal
     and external link counts, and a list of issues found."""
-    import httpx
-    from urllib.parse import urlparse
     try:
-        from bs4 import BeautifulSoup
+        r, soup = _fetch_soup(url)
     except ImportError:
         return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
-    try:
-        r = httpx.get(url, timeout=20.0, follow_redirects=True,
-                      headers={"User-Agent": "Mozilla/5.0 (compatible; marketing-mcp/1.0)"})
     except Exception as e:  # noqa: BLE001
         return {"error": "fetch failed: " + str(e)}
-    soup = BeautifulSoup(r.text, "html.parser")
+    return _page_audit(r, soup)
+
+
+def _fetch_soup(url: str):
+    """Fetch a URL and parse the HTML. Returns (response, soup). Raises ImportError
+    if beautifulsoup4 is missing, or a network error, so callers surface a clean
+    message. Shared by the on-page tools below."""
+    import httpx
+    from bs4 import BeautifulSoup
+    r = httpx.get(url, timeout=20.0, follow_redirects=True,
+                  headers={"User-Agent": _UA})
+    return r, BeautifulSoup(r.text, "html.parser")
+
+
+def _page_audit(r, soup) -> dict:
+    """On-page audit of an already-fetched page; returns the seo_audit payload.
+    Factored so seo_audit, crawl_site, and seo_score share one auditor."""
+    from urllib.parse import urlparse
 
     def meta(name=None, prop=None):
         t = soup.find("meta", attrs={"name": name} if name else {"property": prop})
@@ -772,6 +801,486 @@ def pagespeed(url: str, strategy: str = "mobile") -> dict:
             field[label] = m.get("category")
     return {"url": url, "strategy": strategy, "scores": scores,
             "core_web_vitals": cwv, "field_data_real_users": field}
+
+
+@mcp.tool()
+def http_check(url: str) -> dict:
+    """Technical health check for a URL (no credentials): the redirect chain, final
+    status, HTTPS enforcement, key security headers, response time, server, and any
+    mixed content (http resources loaded on an https page). Complements seo_audit
+    (content) and pagespeed (speed)."""
+    import httpx
+    from urllib.parse import urljoin, urlparse
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
+    chain, cur, elapsed_ms, final = [], url, 0.0, None
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=False,
+                          headers={"User-Agent": _UA}) as client:
+            for _ in range(10):
+                resp = client.get(cur)
+                elapsed_ms += resp.elapsed.total_seconds() * 1000
+                chain.append({"url": cur, "status": resp.status_code})
+                loc = resp.headers.get("location")
+                if resp.is_redirect and loc:
+                    cur = urljoin(cur, loc)
+                    continue
+                final = resp
+                break
+    except Exception as e:  # noqa: BLE001
+        return {"error": "fetch failed: " + str(e)}
+    if final is None:
+        return {"error": "too many redirects (>10)", "redirect_chain": chain}
+    h = {k.lower(): v for k, v in final.headers.items()}
+    is_https = urlparse(cur).scheme == "https"
+    https_redirect = None
+    if urlparse(url).scheme == "http":
+        https_redirect = any(urlparse(c["url"]).scheme == "https" for c in chain)
+    sec = {
+        "strict_transport_security": h.get("strict-transport-security"),
+        "content_security_policy": bool(h.get("content-security-policy")),
+        "x_content_type_options": h.get("x-content-type-options"),
+        "x_frame_options": h.get("x-frame-options"),
+        "referrer_policy": h.get("referrer-policy"),
+    }
+    mixed = []
+    if is_https:
+        try:
+            soup = BeautifulSoup(final.text, "html.parser")
+            for tag, attr in (("img", "src"), ("script", "src"), ("link", "href"),
+                              ("iframe", "src"), ("source", "src")):
+                for el in soup.find_all(tag):
+                    v = (el.get(attr) or "").strip()
+                    if v.startswith("http://"):
+                        mixed.append(v)
+        except Exception:  # noqa: BLE001
+            pass
+    issues = []
+    if not is_https:
+        issues.append("not served over HTTPS")
+    if urlparse(url).scheme == "http" and not https_redirect:
+        issues.append("http does not redirect to https")
+    if is_https and not sec["strict_transport_security"]:
+        issues.append("no HSTS (Strict-Transport-Security) header")
+    if not sec["x_content_type_options"]:
+        issues.append("no X-Content-Type-Options header")
+    if not sec["x_frame_options"] and not sec["content_security_policy"]:
+        issues.append("no clickjacking protection (X-Frame-Options or CSP)")
+    if mixed:
+        issues.append("%d mixed-content (http) resource(s) on an https page" % len(mixed))
+    if len(chain) > 2:
+        issues.append("redirect chain has %d hops" % (len(chain) - 1))
+    return {
+        "url": url, "final_url": cur, "status_code": final.status_code,
+        "https": is_https, "http_to_https_redirect": https_redirect,
+        "redirect_chain": chain, "response_time_ms": round(elapsed_ms, 1),
+        "server": h.get("server"), "content_type": h.get("content-type"),
+        "security_headers": sec, "mixed_content": mixed[:20],
+        "mixed_content_count": len(mixed), "issues": issues,
+    }
+
+
+_STOPWORDS = set("a an and are as at be by for from has have in is it its of on or "
+                 "that the to was were will with this you your we our they their he "
+                 "she his her not but if then so do does can could would should i "
+                 "all also more most other some such no only own same than too very".split())
+
+
+def _syllables(word: str) -> int:
+    word = re.sub(r"[^a-z]", "", word.lower())
+    if not word:
+        return 0
+    n = len(re.findall(r"[aeiouy]+", word))
+    if word.endswith("e") and n > 1:
+        n -= 1
+    return max(1, n)
+
+
+@mcp.tool()
+def content_analysis(url: str, focus_keyword: str | None = None) -> dict:
+    """Readability and content analysis of a URL (no credentials): Flesch reading
+    ease, word and sentence counts, top keyword density, the heading outline, and a
+    thin-content flag. Pass focus_keyword to also get that term's density and where
+    it appears (title, H1, first paragraph, URL)."""
+    try:
+        r, soup = _fetch_soup(url)
+    except ImportError:
+        return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": "fetch failed: " + str(e)}
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    title = soup.title.string.strip() if (soup.title and soup.title.string) else ""
+    h1 = " ".join(h.get_text(" ", strip=True) for h in soup.find_all("h1"))
+    first_p = soup.find("p")
+    first_para = first_p.get_text(" ", strip=True) if first_p else ""
+    text = (soup.body or soup).get_text(" ", strip=True)
+    words_list = re.findall(r"[a-zA-Z']+", text.lower())
+    word_count = len(words_list)
+    sentences = max(1, len(re.findall(r"[.!?]+", text)))
+    syl = sum(_syllables(w) for w in words_list) or 1
+    flesch = (round(206.835 - 1.015 * (word_count / sentences) - 84.6 * (syl / word_count), 1)
+              if word_count else None)
+
+    def band(f):
+        if f is None:
+            return None
+        for thr, lab in ((90, "very easy"), (70, "easy"), (60, "standard"),
+                         (50, "fairly hard"), (30, "hard")):
+            if f >= thr:
+                return lab
+        return "very hard"
+
+    counts = Counter(w for w in words_list if w not in _STOPWORDS and len(w) > 2)
+    density = ([{"term": t, "count": c, "density_pct": round(100 * c / word_count, 2)}
+                for t, c in counts.most_common(15)] if word_count else [])
+    outline = [{"level": int(h.name[1]), "text": h.get_text(" ", strip=True)}
+               for h in soup.find_all(["h1", "h2", "h3", "h4"])]
+    issues = []
+    if word_count < 300:
+        issues.append("thin content (%d words)" % word_count)
+    if flesch is not None and flesch < 30:
+        issues.append("hard to read (Flesch %.0f; aim 50+)" % flesch)
+    out = {
+        "url": str(r.url), "word_count": word_count, "sentence_count": sentences,
+        "avg_words_per_sentence": round(word_count / sentences, 1) if word_count else 0,
+        "flesch_reading_ease": flesch, "reading_level": band(flesch),
+        "keyword_density": density, "heading_outline": outline, "issues": issues,
+    }
+    if focus_keyword:
+        fk = focus_keyword.lower().strip()
+        occ = text.lower().count(fk)
+        u = str(r.url).lower()
+        out["focus_keyword"] = {
+            "term": focus_keyword, "occurrences": occ,
+            "density_pct": round(100 * occ / word_count, 2) if word_count else 0,
+            "in_title": fk in title.lower(), "in_h1": fk in h1.lower(),
+            "in_first_paragraph": fk in first_para.lower(),
+            "in_url": fk.replace(" ", "-") in u or fk.replace(" ", "") in u,
+        }
+    return out
+
+
+_SCHEMA_RECOMMENDED = {
+    "Organization": ["name", "url", "logo"],
+    "LocalBusiness": ["name", "address", "telephone"],
+    "Product": ["name", "image", "offers"],
+    "Article": ["headline", "image", "datePublished", "author"],
+    "NewsArticle": ["headline", "image", "datePublished", "author"],
+    "BlogPosting": ["headline", "image", "datePublished", "author"],
+    "BreadcrumbList": ["itemListElement"],
+    "FAQPage": ["mainEntity"],
+    "Event": ["name", "startDate", "location"],
+    "Recipe": ["name", "recipeIngredient", "recipeInstructions"],
+    "VideoObject": ["name", "thumbnailUrl", "uploadDate"],
+    "Person": ["name"],
+    "WebSite": ["name", "url"],
+}
+
+
+@mcp.tool()
+def validate_schema(url: str) -> dict:
+    """Parse and validate the JSON-LD structured data on a page (no credentials).
+    Lists each schema block's @type, flags malformed JSON, and for common types
+    (Organization, LocalBusiness, Product, Article, BreadcrumbList, FAQPage, Event,
+    Recipe and more) reports recommended properties that are missing. seo_audit only
+    counts schema blocks; this opens and checks them."""
+    try:
+        r, soup = _fetch_soup(url)
+    except ImportError:
+        return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": "fetch failed: " + str(e)}
+    blocks = soup.find_all("script", attrs={"type": "application/ld+json"})
+    items, invalid = [], 0
+
+    def visit(node):
+        if isinstance(node, list):
+            for n in node:
+                visit(n)
+            return
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("@graph"), list):
+            for n in node["@graph"]:
+                visit(n)
+        t = node.get("@type")
+        if not t:
+            return
+        for ty in (t if isinstance(t, list) else [t]):
+            rec = _SCHEMA_RECOMMENDED.get(ty, [])
+            items.append({"type": ty,
+                          "missing_recommended": [k for k in rec if k not in node],
+                          "properties": sorted(k for k in node if not k.startswith("@"))})
+
+    for b in blocks:
+        raw = b.string or b.get_text() or ""
+        try:
+            visit(json.loads(raw))
+        except Exception:  # noqa: BLE001
+            invalid += 1
+    issues = []
+    if not blocks:
+        issues.append("no JSON-LD structured data found")
+    if invalid:
+        issues.append("%d JSON-LD block(s) are not valid JSON" % invalid)
+    for it in items:
+        if it["missing_recommended"]:
+            issues.append("%s missing: %s" % (it["type"], ", ".join(it["missing_recommended"])))
+    return {"url": str(r.url), "jsonld_blocks": len(blocks), "invalid_blocks": invalid,
+            "types_found": sorted({it["type"] for it in items}),
+            "items": items, "issues": issues}
+
+
+def _site_root(url: str) -> str:
+    from urllib.parse import urlparse
+    p = urlparse(url if "://" in url else "https://" + url)
+    return "%s://%s" % (p.scheme or "https", p.netloc)
+
+
+def _parse_robots(root: str):
+    """Return (rules, sitemaps) for a site root. rules has disallow/allow path lists
+    for the * user-agent; sitemaps is the list of declared Sitemap: URLs."""
+    import httpx
+    sitemaps, disallow, allow = [], [], []
+    try:
+        r = httpx.get(root + "/robots.txt", timeout=15.0, follow_redirects=True,
+                      headers={"User-Agent": _UA})
+        if r.status_code < 400:
+            agent_star = False
+            for line in r.text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                low = line.lower()
+                if low.startswith("sitemap:"):
+                    sitemaps.append(line.split(":", 1)[1].strip())
+                elif low.startswith("user-agent:"):
+                    agent_star = line.split(":", 1)[1].strip() == "*"
+                elif agent_star and low.startswith("disallow:"):
+                    disallow.append(line.split(":", 1)[1].strip())
+                elif agent_star and low.startswith("allow:"):
+                    allow.append(line.split(":", 1)[1].strip())
+    except Exception:  # noqa: BLE001
+        pass
+    return {"disallow": disallow, "allow": allow}, sitemaps
+
+
+def _parse_sitemap(xml_text):
+    """Return (child_sitemaps, page_urls) from a sitemap body. A <sitemapindex>
+    yields child sitemaps; a <urlset> yields page URLs."""
+    import xml.etree.ElementTree as ET
+    locs = []
+    try:
+        root = ET.fromstring(xml_text.encode("utf-8") if isinstance(xml_text, str) else xml_text)
+    except Exception:  # noqa: BLE001
+        return [], []
+    for el in root.iter():
+        if el.tag.rsplit("}", 1)[-1] == "loc" and el.text:
+            locs.append(el.text.strip())
+    if root.tag.rsplit("}", 1)[-1] == "sitemapindex":
+        return locs, []
+    return [], locs
+
+
+def _collect_sitemap_urls(root: str, declared_sitemaps, limit: int = 200):
+    """Discover up to `limit` page URLs for a site from its sitemap(s), following
+    one level of sitemap-index nesting. Returns (urls, info)."""
+    import httpx
+    queue = list(declared_sitemaps) or [root + "/sitemap.xml"]
+    seen_sm, pages = set(), []
+    info = {"sitemaps_read": [], "is_index": False}
+    while queue and len(pages) < limit:
+        sm = queue.pop(0)
+        if sm in seen_sm:
+            continue
+        seen_sm.add(sm)
+        try:
+            r = httpx.get(sm, timeout=20.0, follow_redirects=True,
+                          headers={"User-Agent": _UA})
+            if r.status_code >= 400:
+                continue
+        except Exception:  # noqa: BLE001
+            continue
+        children, urls = _parse_sitemap(r.text)
+        info["sitemaps_read"].append(sm)
+        if children:
+            info["is_index"] = True
+            queue.extend(c for c in children if c not in seen_sm)
+        for u in urls:
+            if len(pages) >= limit:
+                break
+            pages.append(u)
+    return pages, info
+
+
+@mcp.tool()
+def robots_sitemap(url: str) -> dict:
+    """Fetch and parse robots.txt and the XML sitemap(s) for a site (no
+    credentials). Reports the robots Disallow rules for all crawlers, any declared
+    Sitemap: URLs, and for the sitemap the discovered page-URL count and a sample
+    (follows a sitemap index one level). Pass any URL on the site; the root is
+    derived."""
+    root = _site_root(url)
+    rules, declared = _parse_robots(root)
+    pages, info = _collect_sitemap_urls(root, declared, limit=500)
+    issues = []
+    if not declared:
+        issues.append("no Sitemap: directive in robots.txt")
+    if not pages:
+        issues.append("no sitemap URLs discovered (tried robots + /sitemap.xml)")
+    return {
+        "site": root, "robots_disallow": rules["disallow"], "robots_allow": rules["allow"],
+        "declared_sitemaps": declared, "sitemaps_read": info["sitemaps_read"],
+        "is_sitemap_index": info["is_index"], "discovered_url_count": len(pages),
+        "sample_urls": pages[:25], "issues": issues,
+    }
+
+
+def _disallowed(path_url: str, disallow) -> bool:
+    from urllib.parse import urlparse
+    p = urlparse(path_url).path or "/"
+    return any(d and p.startswith(d) for d in disallow)
+
+
+@mcp.tool()
+def crawl_site(start_url: str, max_pages: int = 20, use_sitemap: bool = True) -> dict:
+    """Crawl up to max_pages pages of a site and audit each, then aggregate (no
+    credentials). Seeds from the sitemap when available, otherwise follows internal
+    links from start_url. Respects robots.txt Disallow for all crawlers. Returns a
+    per-page row (status, title, words, issue count) and a site-wide rollup of the
+    most common issues. The multi-page version of seo_audit."""
+    from urllib.parse import urljoin, urlparse
+    max_pages = max(1, min(int(max_pages), 100))
+    root = _site_root(start_url)
+    host = urlparse(root).netloc
+    rules, declared = _parse_robots(root)
+    disallow = rules["disallow"]
+    seeds = []
+    if use_sitemap:
+        seeds, _ = _collect_sitemap_urls(root, declared, limit=max_pages * 3)
+    queue = list(seeds) if seeds else [start_url]
+    mode = "sitemap" if seeds else "link-follow"
+    visited, rows, all_issues, errors = set(), [], Counter(), 0
+    while queue and len(rows) < max_pages:
+        u = queue.pop(0).split("#", 1)[0]
+        if u in visited or urlparse(u).netloc not in ("", host) or _disallowed(u, disallow):
+            continue
+        visited.add(u)
+        try:
+            r, soup = _fetch_soup(u)
+        except Exception:  # noqa: BLE001
+            errors += 1
+            rows.append({"url": u, "status_code": None, "error": "fetch failed"})
+            continue
+        a = _page_audit(r, soup)
+        rows.append({"url": a["url"], "status_code": a["status_code"], "title": a["title"],
+                     "word_count": a["word_count"], "issue_count": len(a["issues"]),
+                     "issues": a["issues"]})
+        for iss in a["issues"]:
+            all_issues[re.sub(r"\d+", "N", iss)] += 1
+        if mode == "link-follow":
+            for tag in soup.find_all("a", href=True):
+                nxt = urljoin(u, tag["href"]).split("#", 1)[0]
+                if urlparse(nxt).netloc == host and nxt not in visited and len(queue) < max_pages * 4:
+                    queue.append(nxt)
+    return {
+        "site": root, "seed_mode": mode, "pages_crawled": len(rows), "fetch_errors": errors,
+        "common_issues": [{"issue": k, "pages": c} for k, c in all_issues.most_common()],
+        "pages": rows,
+    }
+
+
+@mcp.tool()
+def check_links(url: str, scope: str = "all", limit: int = 50) -> dict:
+    """Check the links on a page for breakage (no credentials). Fetches the page,
+    extracts up to `limit` unique links, requests each, and reports those that
+    return 4xx/5xx or fail to connect. scope = all | internal | external."""
+    import httpx
+    from urllib.parse import urljoin, urlparse
+    try:
+        r, soup = _fetch_soup(url)
+    except ImportError:
+        return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": "fetch failed: " + str(e)}
+    host = urlparse(str(r.url)).netloc
+    seen_set, targets = set(), []
+    for a in soup.find_all("a", href=True):
+        h = a["href"]
+        if h.startswith(("#", "mailto:", "tel:", "javascript:", "data:")):
+            continue
+        absu = urljoin(str(r.url), h).split("#", 1)[0]
+        if not absu.startswith("http"):
+            continue
+        internal = urlparse(absu).netloc == host
+        if (scope == "internal" and not internal) or (scope == "external" and internal):
+            continue
+        if absu in seen_set:
+            continue
+        seen_set.add(absu)
+        targets.append((absu, internal))
+        if len(targets) >= limit:
+            break
+    broken, checked = [], 0
+    with httpx.Client(timeout=8.0, follow_redirects=True, headers={"User-Agent": _UA}) as client:
+        for absu, internal in targets:
+            checked += 1
+            try:
+                resp = client.head(absu)
+                if resp.status_code >= 400:
+                    resp = client.get(absu)  # some servers reject HEAD; confirm with GET
+                code = resp.status_code
+            except Exception as e:  # noqa: BLE001
+                broken.append({"url": absu, "internal": internal, "status": None, "error": str(e)[:80]})
+                continue
+            if code >= 400:
+                broken.append({"url": absu, "internal": internal, "status": code})
+    return {"url": str(r.url), "scope": scope, "links_checked": checked,
+            "broken_count": len(broken), "broken": broken}
+
+
+@mcp.tool()
+def seo_score(url: str) -> dict:
+    """One 0-100 SEO health score and letter grade for a URL (no credentials),
+    rolled up from the on-page audit, technical health (HTTPS, headers, redirects),
+    and content readability. Returns the overall score, the grade, the three
+    component sub-scores, and the top fixes. The single-number summary on top of
+    seo_audit, http_check, and content_analysis."""
+    on = seo_audit(url)
+    if "error" in on:
+        return on
+    tech = http_check(url)
+    con = content_analysis(url)
+    onpage_issues = on.get("issues", [])
+    tech_issues = tech.get("issues", []) if "error" not in tech else []
+    con_issues = con.get("issues", []) if "error" not in con else []
+    onpage = max(0, 100 - 8 * len(onpage_issues))
+    technical = 100
+    for iss in tech_issues:
+        technical -= 25 if "https" in iss.lower() else 8
+    technical = max(0, technical)
+    content = 100
+    if con.get("word_count", 300) < 300:
+        content -= 25
+    fl = con.get("flesch_reading_ease")
+    if fl is not None and fl < 30:
+        content -= 15
+    content = max(0, content)
+    overall = round(0.5 * onpage + 0.3 * technical + 0.2 * content)
+    grade = ("A" if overall >= 90 else "B" if overall >= 80 else "C" if overall >= 70
+             else "D" if overall >= 60 else "F")
+    fixes = ["[%s] %s" % (label, iss)
+             for label, lst in (("on-page", onpage_issues), ("technical", tech_issues),
+                                ("content", con_issues)) for iss in lst]
+    return {
+        "url": on.get("url", url), "score": overall, "grade": grade,
+        "components": {"onpage": onpage, "technical": technical, "content": content},
+        "weights": {"onpage": 0.5, "technical": 0.3, "content": 0.2},
+        "top_fixes": fixes[:12],
+    }
 
 
 # ==== GOOGLE ADS reporting + management ====================================
@@ -1120,7 +1629,7 @@ def ga4_top_pages(property_id: str | None = None, days: int = 28, limit: int = 2
 
 # ==== GOOGLE SEARCH CONSOLE (organic search) ===============================
 
-def _gsc_service():
+def _gsc_service(write: bool = False):
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
@@ -1131,8 +1640,11 @@ def _gsc_service():
         raise RuntimeError("Set GOOGLE_APPLICATION_CREDENTIALS to a service-account json (the same key "
                            "as GA4) and add that service account to the Search Console property. "
                            "See README.md (Setup -> Search Console).")
-    creds = service_account.Credentials.from_service_account_file(
-        path, scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+    # readonly covers analytics + URL Inspection + sitemap listing; sitemap submit
+    # needs the full webmasters scope (and the SA must be a full property user).
+    scope = ("https://www.googleapis.com/auth/webmasters" if write
+             else "https://www.googleapis.com/auth/webmasters.readonly")
+    creds = service_account.Credentials.from_service_account_file(path, scopes=[scope])
     return build("searchconsole", "v1", credentials=creds, cache_discovery=False)
 
 
@@ -1190,6 +1702,83 @@ def gsc_top_pages(site_url: str, days: int = 28, limit: int = 50) -> dict:
     """Top landing pages by organic clicks and impressions (Google Search Console),
     over the last N days."""
     return gsc_search_analytics(site_url, days, ["page"], limit)
+
+
+@mcp.tool()
+def gsc_inspect_url(page_url: str, site_url: str | None = None) -> dict:
+    """Google Search Console URL Inspection for one page: whether it is indexed, its
+    coverage state, last crawl time, Googlebot crawl/robots state, the Google-chosen
+    canonical, mobile usability, and rich-results status. site_url is the property
+    the page belongs to (e.g. 'https://example.com/' or 'sc-domain:example.com'); if
+    omitted it is derived from page_url. Same service account as the other gsc_*
+    tools."""
+    try:
+        svc = _gsc_service()
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    if not site_url:
+        from urllib.parse import urlparse
+        p = urlparse(page_url)
+        site_url = "%s://%s/" % (p.scheme, p.netloc)
+    try:
+        resp = svc.urlInspection().index().inspect(
+            body={"inspectionUrl": page_url, "siteUrl": site_url}).execute()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "URL Inspection API error: " + str(e)}
+    res = resp.get("inspectionResult", {})
+    idx = res.get("indexStatusResult", {})
+    mob = res.get("mobileUsabilityResult", {})
+    rich = res.get("richResultsResult", {})
+    return {
+        "url": page_url, "site": site_url,
+        "verdict": idx.get("verdict"), "coverage_state": idx.get("coverageState"),
+        "indexing_state": idx.get("indexingState"), "robots_txt_state": idx.get("robotsTxtState"),
+        "page_fetch_state": idx.get("pageFetchState"), "last_crawl_time": idx.get("lastCrawlTime"),
+        "crawled_as": idx.get("crawledAs"), "google_canonical": idx.get("googleCanonical"),
+        "user_canonical": idx.get("userCanonical"),
+        "mobile_usable": mob.get("verdict"), "rich_results": rich.get("verdict"),
+        "inspect_link": res.get("inspectionResultLink"),
+    }
+
+
+@mcp.tool()
+def gsc_list_sitemaps(site_url: str) -> dict:
+    """List the sitemaps submitted for a Search Console property, with each one's
+    last-downloaded time, type, pending state, and warning/error counts. Same
+    service account as the other gsc_* tools."""
+    try:
+        svc = _gsc_service()
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    try:
+        resp = svc.sitemaps().list(siteUrl=site_url).execute()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Search Console API error: " + str(e)}
+    out = []
+    for s in resp.get("sitemap", []):
+        contents = s.get("contents") or []
+        out.append({"path": s.get("path"), "last_downloaded": s.get("lastDownloaded"),
+                    "type": s.get("type"), "is_pending": s.get("isPending"),
+                    "is_sitemaps_index": s.get("isSitemapsIndex"),
+                    "warnings": s.get("warnings"), "errors": s.get("errors"),
+                    "submitted_urls": contents[0].get("submitted") if contents else None})
+    return {"site": site_url, "count": len(out), "sitemaps": out}
+
+
+@mcp.tool()
+def gsc_submit_sitemap(site_url: str, sitemap_url: str) -> dict:
+    """Submit a sitemap to Google Search Console for a property. The service account
+    must be a full user (not restricted) on the property. sitemap_url is the full
+    URL of the sitemap, e.g. 'https://example.com/sitemap.xml'."""
+    try:
+        svc = _gsc_service(write=True)
+    except RuntimeError as e:
+        return {"needs_setup": str(e)}
+    try:
+        svc.sitemaps().submit(siteUrl=site_url, feedpath=sitemap_url).execute()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "Search Console API error (submit needs full-user permission): " + str(e)}
+    return {"submitted": True, "site": site_url, "sitemap": sitemap_url}
 
 
 # ==== clients: multi-account (granular + rollup) ===========================
@@ -1515,6 +2104,8 @@ def _platform_status(live: bool = False) -> dict:
     gsc_lib = _has_module("googleapiclient")
     gsc = {"library_installed": gsc_lib, "credentials_file_exists": bool(cred and os.path.exists(cred))}
     gsc["ready"] = gsc_lib and gsc["credentials_file_exists"]
+    gsc["tools"] = ["gsc_top_queries", "gsc_top_pages", "gsc_search_analytics", "gsc_list_sites",
+                    "gsc_inspect_url", "gsc_list_sitemaps", "gsc_submit_sitemap"]
     if not gsc["ready"]:
         gsc["next_step"] = ("pip install google-api-python-client" if not gsc_lib
                             else "set GOOGLE_APPLICATION_CREDENTIALS (same key as GA4) and add the "
@@ -1525,7 +2116,10 @@ def _platform_status(live: bool = False) -> dict:
     status = {
         "keyword_no_auth": {"ready": True, "tools": ["autocomplete_suggestions", "cluster_keywords"]},
         "trends": {"ready": pyt, "next_step": None if pyt else "pip install pytrends"},
-        "site_audit": {"ready": bs4_ok, "tools": ["seo_audit", "pagespeed"],
+        "site_audit": {"ready": bs4_ok,
+                       "tools": ["seo_audit", "pagespeed", "http_check", "content_analysis",
+                                 "validate_schema", "robots_sitemap", "crawl_site", "check_links",
+                                 "seo_score"],
                        "next_step": None if bs4_ok else "pip install beautifulsoup4"},
         "google_ads": ga, "meta_ads": meta, "ga4": ga4, "search_console": gsc,
     }
