@@ -327,11 +327,13 @@ def keyword_ideas(seed_keywords: list[str] | None = None, page_url: str | None =
                   geo: str = "US", language: str = "en", limit: int = 200,
                   include_adult: bool = False, locations: list[str] | None = None,
                   location_set: str | None = None, country_code: str = "US") -> dict:
-    """Keyword ideas from seed keywords and/or a landing-page URL, with average
-    monthly searches, competition, and top-of-page bid range. Target one country
-    via `geo`, or many specific places via `locations` (town/city/state names or
-    geo ids) or a saved `location_set`. Without active ad spend, volumes come back
-    as Google's coarse ranges, not exact numbers."""
+    """Expand seed keywords and/or a landing-page URL into keyword ideas with average monthly search volume, competition, and CPC.
+    Use to discover new terms around a topic or page before committing to a list.
+
+    Returns: count, ideas.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `keyword_ideas(seed_keywords=['running shoes'])`.
+    """
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -383,9 +385,13 @@ def keyword_historical_metrics(keywords: list[str], geo: str = "US",
                                language: str = "en", locations: list[str] | None = None,
                                location_set: str | None = None,
                                country_code: str = "US") -> dict:
-    """Historical monthly search volume (12-month series), competition score, and
-    bid range for a specific list of keywords. Target one country via `geo`, or
-    many specific places via `locations` (names or ids) or a saved `location_set`."""
+    """Pull the 12-month monthly search-volume series, competition, and CPC for a specific keyword list, by place.
+    Use to size real demand for terms you already have.
+
+    Returns: count, metrics.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `keyword_historical_metrics(keywords=['running shoes'])`.
+    """
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -429,8 +435,13 @@ def keyword_historical_metrics(keywords: list[str], geo: str = "US",
 @mcp.tool()
 def forecast_keywords(keywords: list[str], max_cpc_bid: float = 1.0,
                       geo: str = "US", language: str = "en") -> dict:
-    """Forecast projected impressions, clicks, cost, CTR, and average CPC for a
-    set of keywords at a given max CPC bid (dollars)."""
+    """Forecast impressions, clicks, cost, CTR, and average CPC for a keyword set at a given max CPC bid.
+    Use to estimate what a campaign on these terms would cost and return before launching.
+
+    Returns: max_cpc_bid, impressions, clicks, cost, ctr, average_cpc.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `forecast_keywords(keywords=['running shoes'])`.
+    """
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -467,10 +478,13 @@ def forecast_keywords(keywords: list[str], max_cpc_bid: float = 1.0,
 
 @mcp.tool()
 def resolve_locations(location_names: list[str], country_code: str = "US") -> dict:
-    """Resolve place names (towns, cities, counties, states) to Google Ads geo
-    target ids with their reach, so you can target specific areas instead of the
-    whole country. Pass the returned ids (or the names) to the keyword tools'
-    `locations` arg, or save them with add_location_set."""
+    """Resolve place names to Google Ads geo target ids with reach.
+    Use to turn town/city/state names into the geo ids the keyword tools accept.
+
+    Returns: count, locations.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `resolve_locations(location_names=['Austin, Texas'])`.
+    """
     try:
         client = _ads_client()
         _customer_id()
@@ -485,9 +499,13 @@ def resolve_locations(location_names: list[str], country_code: str = "US") -> di
 
 @mcp.tool()
 def add_location_set(name: str, locations: list[str], country_code: str = "US") -> dict:
-    """Save a reusable named set of target locations (town/city/state names or geo
-    ids), so you can pass location_set='<name>' to the keyword tools instead of
-    re-typing the list every time. Stored in location_sets.json (gitignored)."""
+    """Save a reusable named set of target locations.
+    Use to stop re-typing the same geo list across keyword calls.
+
+    Returns: saved, count, locations.
+    Setup: no setup.
+    Example: `add_location_set(name=...)`.
+    """
     d = _load_locsets()
     d.setdefault("sets", {})
     items = [str(x).strip() for x in (locations or []) if str(x).strip()]
@@ -498,7 +516,13 @@ def add_location_set(name: str, locations: list[str], country_code: str = "US") 
 
 @mcp.tool()
 def list_location_sets() -> dict:
-    """List the saved location sets (see add_location_set)."""
+    """List the saved location sets.
+    Use to recall the set names you can pass as location_set.
+
+    Returns: count, sets.
+    Setup: no setup.
+    Example: `list_location_sets()`.
+    """
     sets = _load_locsets().get("sets", {})
     return {"count": len(sets),
             "sets": {k: {"count": len(v.get("locations", [])),
@@ -512,15 +536,13 @@ def keyword_research(seed_keywords: list[str] | None = None, keywords: list[str]
                      locations: list[str] | None = None, location_set: str | None = None,
                      geo: str = "US", language: str = "en", country_code: str = "US",
                      limit: int = 500, min_searches: int = 0) -> dict:
-    """Bulk keyword research in one call, the whole keyword-planner workflow without
-    leaving chat. Expand `seed_keywords` into ideas and/or pull metrics for an
-    explicit `keywords` list, across many places at once (`locations` names/ids or
-    a saved `location_set`, else `geo`), then rank by search volume and commercial
-    intent. Returns decision-ready structured rows (each with avg_monthly_searches,
-    competition, intent_score, and a priority that floats the high-intent keywords
-    getting volume to the top), so you decide in the same turn, no CSV export or
-    upload. Chunks under the Google Ads 20-seed cap, so pass a long list at once
-    instead of entering keywords one at a time."""
+    """Run the whole keyword-planner workflow in one call: expand seeds and/or pull metrics for an explicit list across many places, ranked by volume and intent.
+    Use to get decision-ready ranked keyword rows in one shot (the default keyword tool).
+
+    Returns: locations, count, keywords.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `keyword_research(seed_keywords=['running shoes'])`.
+    """
     try:
         client = _ads_client()
         cid = _customer_id()
@@ -589,7 +611,13 @@ def keyword_research(seed_keywords: list[str] | None = None, keywords: list[str]
 @mcp.tool()
 def autocomplete_suggestions(query: str, geo: str = "us", lang: str = "en",
                              limit: int = 15) -> dict:
-    """Google Suggest autocomplete completions for a query. No credentials."""
+    """Return Google Suggest autocomplete completions for a query.
+    Use to see the exact phrasings searchers type, for long-tail and content ideas.
+
+    Returns: query, suggestions.
+    Setup: no setup.
+    Example: `autocomplete_suggestions(query='running shoes')`.
+    """
     import httpx
     try:
         r = httpx.get("https://suggestqueries.google.com/complete/search",
@@ -604,8 +632,13 @@ def autocomplete_suggestions(query: str, geo: str = "us", lang: str = "en",
 
 @mcp.tool()
 def trend_index(keywords: list[str], timeframe: str = "today 12-m", geo: str = "US") -> dict:
-    """Google Trends relative interest over time plus top and rising related
-    queries, up to 5 keywords. Needs pytrends (pip install pytrends)."""
+    """Return Google Trends relative interest over time plus top and rising related queries.
+    Use to see whether interest in a term is rising or falling, and what is breaking out.
+
+    Returns: timeframe, geo, interest, related_queries.
+    Setup: no setup; needs the pytrends package.
+    Example: `trend_index(keywords=['running shoes'])`.
+    """
     try:
         from pytrends.request import TrendReq
     except ImportError:
@@ -644,8 +677,13 @@ _STOP = {"the", "a", "an", "for", "to", "of", "and", "or", "in", "on", "with", "
 
 @mcp.tool()
 def cluster_keywords(keywords: list[str], max_clusters: int = 0) -> dict:
-    """Group a keyword list into themes by the most-shared significant token, so a
-    long idea list becomes a small set of topic clusters. No credentials."""
+    """Group a keyword list into themes by the most-shared significant token.
+    Use to turn a long keyword list into a few topic clusters for content planning.
+
+    Returns: n_clusters, clusters.
+    Setup: no setup.
+    Example: `cluster_keywords(keywords=['running shoes'])`.
+    """
     tokens: dict[str, list[str]] = {}
     freq: Counter = Counter()
     for kw in keywords:
@@ -671,10 +709,13 @@ def cluster_keywords(keywords: list[str], max_clusters: int = 0) -> dict:
 
 @mcp.tool()
 def seo_audit(url: str) -> dict:
-    """On-page SEO audit of a URL (no credentials). Fetches the page and reports
-    title, meta description, headings, word count, canonical, robots, open-graph
-    and twitter tags, JSON-LD schema presence, images missing alt text, internal
-    and external link counts, and a list of issues found."""
+    """Run a full on-page SEO audit of a URL: title, meta, headings, word count, links, and images missing alt text.
+    Use to see every on-page problem on a single page.
+
+    Returns: url, status_code, title, title_length, meta_description, meta_description_length, h1.
+    Setup: no setup.
+    Example: `seo_audit(url='https://example.com')`.
+    """
     try:
         r, soup = _fetch_soup(url)
     except ImportError:
@@ -765,10 +806,13 @@ def _page_audit(r, soup) -> dict:
 
 @mcp.tool()
 def pagespeed(url: str, strategy: str = "mobile") -> dict:
-    """Google PageSpeed Insights (Lighthouse) for a URL: performance, SEO,
-    accessibility, and best-practices scores (0-100) plus Core Web Vitals
-    (LCP, CLS, TBT, INP). strategy = mobile or desktop. No credentials; set
-    PAGESPEED_API_KEY for higher quota."""
+    """Run Google PageSpeed Insights (Lighthouse) for a URL: performance, SEO, and accessibility scores plus Core Web Vitals.
+    Use to measure load performance and field Core Web Vitals for a page.
+
+    Returns: url, strategy, scores, core_web_vitals, field_data_real_users.
+    Setup: no setup; optional set_pagespeed_key raises the rate quota.
+    Example: `pagespeed(url='https://example.com')`.
+    """
     import httpx
     params = [("url", url), ("strategy", strategy)]
     for c in ("performance", "seo", "accessibility", "best-practices"):
@@ -805,10 +849,13 @@ def pagespeed(url: str, strategy: str = "mobile") -> dict:
 
 @mcp.tool()
 def http_check(url: str) -> dict:
-    """Technical health check for a URL (no credentials): the redirect chain, final
-    status, HTTPS enforcement, key security headers, response time, server, and any
-    mixed content (http resources loaded on an https page). Complements seo_audit
-    (content) and pagespeed (speed)."""
+    """Run a technical health check for a URL: redirect chain, HTTPS, security headers, response time, and mixed content.
+    Use to catch redirect, HTTPS, and header problems on a page.
+
+    Returns: url, final_url, status_code, https, http_to_https_redirect, redirect_chain, response_time_ms.
+    Setup: no setup.
+    Example: `http_check(url='https://example.com')`.
+    """
     import httpx
     from urllib.parse import urljoin, urlparse
     try:
@@ -900,10 +947,13 @@ def _syllables(word: str) -> int:
 
 @mcp.tool()
 def content_analysis(url: str, focus_keyword: str | None = None) -> dict:
-    """Readability and content analysis of a URL (no credentials): Flesch reading
-    ease, word and sentence counts, top keyword density, the heading outline, and a
-    thin-content flag. Pass focus_keyword to also get that term's density and where
-    it appears (title, H1, first paragraph, URL)."""
+    """Analyze a URL's readability and content: Flesch reading ease, keyword density, and heading outline.
+    Use to check that a page reads at the right level and uses its focus keyword.
+
+    Returns: flesch_reading_ease, reading_level, keyword_density, heading_outline, issues.
+    Setup: no setup.
+    Example: `content_analysis(url='https://example.com')`.
+    """
     try:
         r, soup = _fetch_soup(url)
     except ImportError:
@@ -982,11 +1032,13 @@ _SCHEMA_RECOMMENDED = {
 
 @mcp.tool()
 def validate_schema(url: str) -> dict:
-    """Parse and validate the JSON-LD structured data on a page (no credentials).
-    Lists each schema block's @type, flags malformed JSON, and for common types
-    (Organization, LocalBusiness, Product, Article, BreadcrumbList, FAQPage, Event,
-    Recipe and more) reports recommended properties that are missing. seo_audit only
-    counts schema blocks; this opens and checks them."""
+    """Parse and validate the JSON-LD structured data on a page.
+    Use to confirm rich-result markup is present and well formed.
+
+    Returns: url, jsonld_blocks, invalid_blocks, types_found, items, issues.
+    Setup: no setup.
+    Example: `validate_schema(url='https://example.com')`.
+    """
     try:
         r, soup = _fetch_soup(url)
     except ImportError:
@@ -1118,11 +1170,13 @@ def _collect_sitemap_urls(root: str, declared_sitemaps, limit: int = 200):
 
 @mcp.tool()
 def robots_sitemap(url: str) -> dict:
-    """Fetch and parse robots.txt and the XML sitemap(s) for a site (no
-    credentials). Reports the robots Disallow rules for all crawlers, any declared
-    Sitemap: URLs, and for the sitemap the discovered page-URL count and a sample
-    (follows a sitemap index one level). Pass any URL on the site; the root is
-    derived."""
+    """Fetch and parse robots.txt and the XML sitemap(s) for a site.
+    Use to confirm crawlers are allowed and the sitemap is discoverable and valid.
+
+    Returns: site, robots_disallow, robots_allow, declared_sitemaps, sitemaps_read, is_sitemap_index, discovered_url_count.
+    Setup: no setup.
+    Example: `robots_sitemap(url='https://example.com')`.
+    """
     root = _site_root(url)
     rules, declared = _parse_robots(root)
     pages, info = _collect_sitemap_urls(root, declared, limit=500)
@@ -1147,11 +1201,13 @@ def _disallowed(path_url: str, disallow) -> bool:
 
 @mcp.tool()
 def crawl_site(start_url: str, max_pages: int = 20, use_sitemap: bool = True) -> dict:
-    """Crawl up to max_pages pages of a site and audit each, then aggregate (no
-    credentials). Seeds from the sitemap when available, otherwise follows internal
-    links from start_url. Respects robots.txt Disallow for all crawlers. Returns a
-    per-page row (status, title, words, issue count) and a site-wide rollup of the
-    most common issues. The multi-page version of seo_audit."""
+    """Crawl up to max_pages pages of a site, audit each, and aggregate the most common issues.
+    Use to get a site-wide issue view instead of one page.
+
+    Returns: site, seed_mode, pages_crawled, fetch_errors, common_issues, pages.
+    Setup: no setup.
+    Example: `crawl_site(start_url=...)`.
+    """
     from urllib.parse import urljoin, urlparse
     max_pages = max(1, min(int(max_pages), 100))
     root = _site_root(start_url)
@@ -1195,9 +1251,13 @@ def crawl_site(start_url: str, max_pages: int = 20, use_sitemap: bool = True) ->
 
 @mcp.tool()
 def check_links(url: str, scope: str = "all", limit: int = 50) -> dict:
-    """Check the links on a page for breakage (no credentials). Fetches the page,
-    extracts up to `limit` unique links, requests each, and reports those that
-    return 4xx/5xx or fail to connect. scope = all | internal | external."""
+    """Check a page's links for breakage (4xx/5xx).
+    Use to find dead links on a page before users or crawlers do.
+
+    Returns: url, scope, links_checked, broken_count, broken.
+    Setup: no setup.
+    Example: `check_links(url='https://example.com')`.
+    """
     import httpx
     from urllib.parse import urljoin, urlparse
     try:
@@ -1244,11 +1304,13 @@ def check_links(url: str, scope: str = "all", limit: int = 50) -> dict:
 
 @mcp.tool()
 def seo_score(url: str) -> dict:
-    """One 0-100 SEO health score and letter grade for a URL (no credentials),
-    rolled up from the on-page audit, technical health (HTTPS, headers, redirects),
-    and content readability. Returns the overall score, the grade, the three
-    component sub-scores, and the top fixes. The single-number summary on top of
-    seo_audit, http_check, and content_analysis."""
+    """Roll up the on-page audit, technical health, and readability into one 0-100 SEO score and letter grade.
+    Use to get the fast headline 'how is this page doing' before drilling in.
+
+    Returns: url, score, grade, components, weights, top_fixes.
+    Setup: no setup.
+    Example: `seo_score(url='https://example.com')`.
+    """
     on = seo_audit(url)
     if "error" in on:
         return on
@@ -1287,7 +1349,13 @@ def seo_score(url: str) -> dict:
 
 @mcp.tool()
 def list_ads_accounts() -> dict:
-    """List the Google Ads customer ids the configured credentials can access."""
+    """List the Google Ads customer ids the configured credentials can access.
+    Use to find the customer id the other Ads tools need.
+
+    Returns: accounts.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `list_ads_accounts()`.
+    """
     try:
         client = _ads_client()
     except RuntimeError as e:
@@ -1303,11 +1371,13 @@ def list_ads_accounts() -> dict:
 @mcp.tool()
 def ads_query(gaql: str, customer_id: str | None = None, client: str | None = None,
               limit: int = 1000) -> dict:
-    """Run any GAQL query against Google Ads and return the rows. This is the full
-    reporting surface: campaign, ad_group, ad_group_ad, keyword_view,
-    search_term_view, and the metrics/segments on each. Target an account by
-    `customer_id`, or by `client` name (resolved from clients.json). Example:
-    'SELECT campaign.name, metrics.clicks FROM campaign WHERE segments.date DURING LAST_7_DAYS'."""
+    """Run any GAQL query against Google Ads and return the rows.
+    Use to run any custom Google Ads report the named tools do not cover.
+
+    Returns: row_count, rows.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `ads_query(gaql=...)`.
+    """
     try:
         gclient = _ads_client()
         cid = _customer_id(customer_id, client)
@@ -1331,9 +1401,13 @@ def ads_query(gaql: str, customer_id: str | None = None, client: str | None = No
 @mcp.tool()
 def campaign_performance(days: int = 30, customer_id: str | None = None,
                          client: str | None = None) -> dict:
-    """Per-campaign performance (impressions, clicks, cost, conversions, CTR, avg
-    CPC) over the last N days, highest spend first. Target one account by
-    customer_id or one `client` from clients.json."""
+    """Report per-campaign Google Ads performance: impressions, clicks, cost, conversions, CTR.
+    Use to get a quick campaign scoreboard without writing GAQL.
+
+    Returns: row_count, rows.
+    Setup: no setup.
+    Example: `campaign_performance(days=...)`.
+    """
     start, end = _date_range(days)
     gaql = ("SELECT campaign.id, campaign.name, campaign.status, metrics.impressions, "
             "metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.ctr, "
@@ -1345,9 +1419,13 @@ def campaign_performance(days: int = 30, customer_id: str | None = None,
 @mcp.tool()
 def search_terms_report(days: int = 30, customer_id: str | None = None,
                         client: str | None = None, limit: int = 200) -> dict:
-    """The search terms that triggered ads, with impressions, clicks, cost, and
-    conversions over the last N days. Target one account by customer_id or one
-    `client` from clients.json."""
+    """Report the actual search terms that triggered ads, with impressions, clicks, cost, and conversions.
+    Use to find wasted spend and negative-keyword candidates.
+
+    Returns: row_count, rows.
+    Setup: no setup.
+    Example: `search_terms_report(days=...)`.
+    """
     start, end = _date_range(days)
     gaql = ("SELECT search_term_view.search_term, campaign.name, metrics.impressions, "
             "metrics.clicks, metrics.cost_micros, metrics.conversions "
@@ -1359,8 +1437,13 @@ def search_terms_report(days: int = 30, customer_id: str | None = None,
 @mcp.tool()
 def set_campaign_status(campaign_id: str, status: str = "PAUSED",
                         customer_id: str | None = None, client: str | None = None) -> dict:
-    """Pause or enable a Google Ads campaign. status = PAUSED or ENABLED. Target one
-    account by customer_id or one `client` from clients.json."""
+    """Pause or enable a Google Ads campaign.
+    Use to start or stop a Google Ads campaign from chat.
+
+    Returns: updated, status.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `set_campaign_status(campaign_id=...)`.
+    """
     try:
         gclient = _ads_client()
         cid = _customer_id(customer_id, client)
@@ -1383,9 +1466,13 @@ def set_campaign_status(campaign_id: str, status: str = "PAUSED",
 @mcp.tool()
 def set_campaign_budget(campaign_budget_id: str, amount: float,
                         customer_id: str | None = None, client: str | None = None) -> dict:
-    """Change a campaign budget's daily amount (dollars). Pass the campaign budget
-    id (from campaign.campaign_budget), not the campaign id. Target one account by
-    customer_id or one `client` from clients.json."""
+    """Change a Google Ads campaign budget's daily amount.
+    Use to raise or cut a campaign's daily spend.
+
+    Returns: updated, amount.
+    Setup: needs Google Ads (run connect_google_ads).
+    Example: `set_campaign_budget(campaign_budget_id=...)`.
+    """
     try:
         gclient = _ads_client()
         cid = _customer_id(customer_id, client)
@@ -1409,7 +1496,13 @@ def set_campaign_budget(campaign_budget_id: str, amount: float,
 
 @mcp.tool()
 def meta_list_ad_accounts() -> dict:
-    """List the Meta ad accounts the access token can reach."""
+    """List the Meta ad accounts the access token can reach.
+    Use to find the act_<id> the other Meta tools need.
+
+    Returns: accounts.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_list_ad_accounts()`.
+    """
     try:
         data = _meta_get("me/adaccounts", {"fields": "account_id,name,account_status,currency"})
     except RuntimeError as e:
@@ -1420,8 +1513,13 @@ def meta_list_ad_accounts() -> dict:
 @mcp.tool()
 def meta_list_campaigns(ad_account_id: str | None = None, client: str | None = None,
                         limit: int = 100) -> dict:
-    """Campaigns under a Meta ad account (act_<id> or <id>), or one `client` from
-    clients.json (uses its meta_ad_account_id)."""
+    """List the campaigns under a Meta ad account.
+    Use to see a Meta account's campaigns and their ids.
+
+    Returns: campaigns.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_list_campaigns(ad_account_id=...)`.
+    """
     acct_id = _meta_account(client, ad_account_id)
     if not acct_id:
         return {"needs_setup": "provide ad_account_id or a client with meta_ad_account_id in clients.json"}
@@ -1436,7 +1534,13 @@ def meta_list_campaigns(ad_account_id: str | None = None, client: str | None = N
 
 @mcp.tool()
 def meta_list_adsets(campaign_id: str, limit: int = 100) -> dict:
-    """Ad sets under a Meta campaign."""
+    """List the ad sets under a Meta campaign.
+    Use to drill from a campaign into its ad sets.
+
+    Returns: adsets.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_list_adsets(campaign_id=...)`.
+    """
     try:
         data = _meta_get(campaign_id + "/adsets",
                          {"fields": "id,name,status,daily_budget,optimization_goal", "limit": limit})
@@ -1447,7 +1551,13 @@ def meta_list_adsets(campaign_id: str, limit: int = 100) -> dict:
 
 @mcp.tool()
 def meta_list_ads(adset_id: str, limit: int = 100) -> dict:
-    """Ads under a Meta ad set."""
+    """List the ads under a Meta ad set.
+    Use to drill from an ad set into its ads.
+
+    Returns: ads.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_list_ads(adset_id=...)`.
+    """
     try:
         data = _meta_get(adset_id + "/ads", {"fields": "id,name,status,creative", "limit": limit})
     except RuntimeError as e:
@@ -1459,10 +1569,13 @@ def meta_list_ads(adset_id: str, limit: int = 100) -> dict:
 def meta_insights(object_id: str | None = None, level: str = "campaign", days: int = 30,
                   client: str | None = None, date_preset: str | None = None,
                   fields: str = "impressions,clicks,spend,ctr,cpc,cpm,reach,actions") -> dict:
-    """Meta Ads insights (performance) over the last `days` days (or a Meta
-    date_preset like last_7d). Pass object_id (ad account act_<id>, campaign, ad
-    set, or ad), or a `client` from clients.json (uses its ad account at account
-    level). level = account|campaign|adset|ad."""
+    """Report Meta Ads performance over the last N days, by account or campaign.
+    Use to get a Meta spend-and-results readout.
+
+    Returns: insights.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_insights(object_id=...)`.
+    """
     oid = object_id
     if not oid and client:
         acct = _meta_account(client)
@@ -1486,7 +1599,13 @@ def meta_insights(object_id: str | None = None, level: str = "campaign", days: i
 
 @mcp.tool()
 def meta_set_campaign_status(campaign_id: str, status: str = "PAUSED") -> dict:
-    """Pause or activate a Meta campaign. status = PAUSED or ACTIVE."""
+    """Pause or activate a Meta campaign.
+    Use to start or stop a Meta campaign from chat.
+
+    Returns: campaign_id, status, result.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_set_campaign_status(campaign_id=...)`.
+    """
     try:
         j = _meta_post(campaign_id, {"status": status.upper()})
     except RuntimeError as e:
@@ -1498,12 +1617,13 @@ def meta_set_campaign_status(campaign_id: str, status: str = "PAUSED") -> dict:
 def meta_ad_library(search_terms: str | None = None, page_ids: list[str] | None = None,
                     countries: list[str] | None = None, active_status: str = "ACTIVE",
                     limit: int = 25) -> dict:
-    """Search Meta's public Ad Library for running ads, by keyword (`search_terms`)
-    or advertiser page id (`page_ids`). Returns the advertiser, creative text,
-    platforms, run dates, and a snapshot url, for competitor ad intel. Uses
-    META_ACCESS_TOKEN; `countries` defaults to ['US']. active_status =
-    ACTIVE | INACTIVE | ALL. Coverage of non-political ads is limited by Meta to
-    some regions and may require app identity verification."""
+    """Search Meta's public Ad Library for running ads, by keyword or page.
+    Use to see what ads a competitor is running, with no ad account needed.
+
+    Returns: count, ads.
+    Setup: needs Meta Ads (run connect_meta).
+    Example: `meta_ad_library(search_terms=...)`.
+    """
     if not search_terms and not page_ids:
         return {"error": "provide search_terms or page_ids"}
     params = {
@@ -1560,11 +1680,13 @@ def ga4_run_report(property_id: str | None = None, days: int = 28,
                    dimensions: list[str] | None = None, metrics: list[str] | None = None,
                    start_date: str | None = None, end_date: str = "today",
                    limit: int = 100, client: str | None = None) -> dict:
-    """Run any GA4 report over the last `days` days (the consistent date control,
-    same as the Ads and Meta tools), or pass an explicit start_date/end_date.
-    Target a property by property_id or one `client` from clients.json. Defaults
-    to sessions and users by default channel group. Dimensions/metrics are GA4
-    API names (e.g. sessionSource, pagePath; sessions, totalUsers)."""
+    """Run any GA4 report over a date range with chosen dimensions and metrics.
+    Use to run any custom GA4 query the named tools do not cover.
+
+    Returns: dimensions, metrics, row_count, rows.
+    Setup: needs GA4 (run connect_analytics).
+    Example: `ga4_run_report(property_id=...)`.
+    """
     prop = _ga4_property(client, property_id)
     if not prop:
         return {"needs_setup": "provide property_id or a client with ga4_property_id in clients.json"}
@@ -1581,7 +1703,13 @@ def ga4_run_report(property_id: str | None = None, days: int = 28,
 @mcp.tool()
 def ga4_realtime(property_id: str, dimensions: list[str] | None = None,
                  metrics: list[str] | None = None, limit: int = 50) -> dict:
-    """GA4 realtime report (last 30 minutes). Defaults to active users by country."""
+    """Run a GA4 realtime report for the last 30 minutes.
+    Use to see who is on the site right now.
+
+    Returns: dimensions, metrics, row_count, rows.
+    Setup: no setup.
+    Example: `ga4_realtime(property_id=...)`.
+    """
     try:
         return _ga4_report(property_id, dimensions or ["country"],
                            metrics or ["activeUsers"], None, None, limit, realtime=True)
@@ -1594,8 +1722,13 @@ def ga4_realtime(property_id: str, dimensions: list[str] | None = None,
 @mcp.tool()
 def ga4_traffic_sources(property_id: str | None = None, days: int = 28, limit: int = 25,
                         client: str | None = None) -> dict:
-    """GA4 sessions, users, and conversions by acquisition channel over N days.
-    Target a property by property_id or one `client` from clients.json."""
+    """Report GA4 sessions, users, and conversions by acquisition channel over N days.
+    Use to see which channels bring traffic and conversions.
+
+    Returns: dimensions, metrics, row_count, rows.
+    Setup: needs GA4 (run connect_analytics).
+    Example: `ga4_traffic_sources(property_id=...)`.
+    """
     prop = _ga4_property(client, property_id)
     if not prop:
         return {"needs_setup": "provide property_id or a client with ga4_property_id in clients.json"}
@@ -1612,8 +1745,13 @@ def ga4_traffic_sources(property_id: str | None = None, days: int = 28, limit: i
 @mcp.tool()
 def ga4_top_pages(property_id: str | None = None, days: int = 28, limit: int = 25,
                   client: str | None = None) -> dict:
-    """GA4 most-viewed pages by views and users over N days. Target a property by
-    property_id or one `client` from clients.json."""
+    """Report the GA4 most-viewed pages by views and users over N days.
+    Use to see which pages get the most traffic.
+
+    Returns: dimensions, metrics, row_count, rows.
+    Setup: needs GA4 (run connect_analytics).
+    Example: `ga4_top_pages(property_id=...)`.
+    """
     prop = _ga4_property(client, property_id)
     if not prop:
         return {"needs_setup": "provide property_id or a client with ga4_property_id in clients.json"}
@@ -1650,8 +1788,13 @@ def _gsc_service(write: bool = False):
 
 @mcp.tool()
 def gsc_list_sites() -> dict:
-    """List the sites the configured service account can read in Google Search
-    Console. If empty, add the service-account email as a user on the property."""
+    """List the Search Console sites the service account can read.
+    Use to find the verified site url the Search Console tools need.
+
+    Returns: sites.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_list_sites()`.
+    """
     try:
         svc = _gsc_service()
     except RuntimeError as e:
@@ -1666,10 +1809,13 @@ def gsc_list_sites() -> dict:
 @mcp.tool()
 def gsc_search_analytics(site_url: str, days: int = 28, dimensions: list[str] | None = None,
                          limit: int = 100) -> dict:
-    """Google Search Console performance for a verified site: clicks, impressions,
-    CTR, and average position, grouped by `dimensions` (query, page, country,
-    device, date) over the last N days. site_url is the exact property string,
-    e.g. 'https://example.com/' or 'sc-domain:example.com'."""
+    """Report Search Console performance for a verified site: clicks, impressions, CTR, and position, by dimension.
+    Use to run a custom organic-search report by query, page, country, or device.
+
+    Returns: site, days, dimensions, count, rows.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_search_analytics(site_url='https://example.com')`.
+    """
     try:
         svc = _gsc_service()
     except RuntimeError as e:
@@ -1692,26 +1838,37 @@ def gsc_search_analytics(site_url: str, days: int = 28, dimensions: list[str] | 
 
 @mcp.tool()
 def gsc_top_queries(site_url: str, days: int = 28, limit: int = 50) -> dict:
-    """Top organic search queries bringing clicks and impressions to a site (Google
-    Search Console), over the last N days."""
+    """Report the top organic search queries by clicks and impressions for a site.
+    Use to see what people search to find the site.
+
+    Returns: site, days, dimensions, count, rows.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_top_queries(site_url='https://example.com')`.
+    """
     return gsc_search_analytics(site_url, days, ["query"], limit)
 
 
 @mcp.tool()
 def gsc_top_pages(site_url: str, days: int = 28, limit: int = 50) -> dict:
-    """Top landing pages by organic clicks and impressions (Google Search Console),
-    over the last N days."""
+    """Report the top landing pages by organic clicks and impressions for a site.
+    Use to see which pages win organic traffic.
+
+    Returns: site, days, dimensions, count, rows.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_top_pages(site_url='https://example.com')`.
+    """
     return gsc_search_analytics(site_url, days, ["page"], limit)
 
 
 @mcp.tool()
 def gsc_inspect_url(page_url: str, site_url: str | None = None) -> dict:
-    """Google Search Console URL Inspection for one page: whether it is indexed, its
-    coverage state, last crawl time, Googlebot crawl/robots state, the Google-chosen
-    canonical, mobile usability, and rich-results status. site_url is the property
-    the page belongs to (e.g. 'https://example.com/' or 'sc-domain:example.com'); if
-    omitted it is derived from page_url. Same service account as the other gsc_*
-    tools."""
+    """Run Search Console URL Inspection for one page: index status, canonical, crawl, and mobile usability.
+    Use to check why a specific page is or is not indexed.
+
+    Returns: url, site, verdict, coverage_state, indexing_state, robots_txt_state, page_fetch_state.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_inspect_url(page_url='https://example.com')`.
+    """
     try:
         svc = _gsc_service()
     except RuntimeError as e:
@@ -1743,9 +1900,13 @@ def gsc_inspect_url(page_url: str, site_url: str | None = None) -> dict:
 
 @mcp.tool()
 def gsc_list_sitemaps(site_url: str) -> dict:
-    """List the sitemaps submitted for a Search Console property, with each one's
-    last-downloaded time, type, pending state, and warning/error counts. Same
-    service account as the other gsc_* tools."""
+    """List the sitemaps submitted for a Search Console property, with each one's status.
+    Use to see which sitemaps Google has and their status.
+
+    Returns: site, count, sitemaps.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_list_sitemaps(site_url='https://example.com')`.
+    """
     try:
         svc = _gsc_service()
     except RuntimeError as e:
@@ -1767,9 +1928,13 @@ def gsc_list_sitemaps(site_url: str) -> dict:
 
 @mcp.tool()
 def gsc_submit_sitemap(site_url: str, sitemap_url: str) -> dict:
-    """Submit a sitemap to Google Search Console for a property. The service account
-    must be a full user (not restricted) on the property. sitemap_url is the full
-    URL of the sitemap, e.g. 'https://example.com/sitemap.xml'."""
+    """Submit a sitemap to Search Console for a property.
+    Use to tell Google about a new or updated sitemap.
+
+    Returns: submitted, site, sitemap.
+    Setup: needs Search Console (run connect_analytics).
+    Example: `gsc_submit_sitemap(site_url='https://example.com')`.
+    """
     try:
         svc = _gsc_service(write=True)
     except RuntimeError as e:
@@ -1785,9 +1950,13 @@ def gsc_submit_sitemap(site_url: str, sitemap_url: str) -> dict:
 
 @mcp.tool()
 def list_clients() -> dict:
-    """List configured clients and which platforms each has an account id for.
-    Clients live in clients.json (template: clients.example.json). Pass a client
-    name to any reporting tool's `client` arg to target it."""
+    """List the configured clients and which platforms each has an account id for.
+    Use to see the multi-client roster before a rollup.
+
+    Returns: default, count, clients.
+    Setup: no setup.
+    Example: `list_clients()`.
+    """
     reg = _load_clients()
     clients = reg.get("clients", {}) or {}
     out = [{"client": name, "label": rec.get("label", name),
@@ -1803,8 +1972,12 @@ def add_client(name: str, label: str | None = None, google_ads_customer_id: str 
                meta_ad_account_id: str = "", ga4_property_id: str = "",
                make_default: bool = False) -> dict:
     """Add or update a client in clients.json with its per-platform account ids.
-    Any id left blank is not set for that platform. The first client added (or
-    make_default=true) becomes the default used when no `client` is passed."""
+    Use to register a client so the tools can target it by name.
+
+    Returns: saved, record, default.
+    Setup: no setup.
+    Example: `add_client(name=...)`.
+    """
     reg = _load_clients()
     reg.setdefault("clients", {})
     rec = reg["clients"].get(name, {})
@@ -1864,11 +2037,13 @@ def _ga4_totals(days: int, property_id: str) -> dict:
 
 @mcp.tool()
 def clients_overview(days: int = 30, clients: list[str] | None = None) -> dict:
-    """Granular per-client KPIs across all platforms PLUS a rolled-up total. For
-    each client it pulls Google Ads (cost, clicks, conversions), Meta (spend,
-    clicks), and GA4 (sessions, conversions) for the last N days using that
-    client's account ids from clients.json. A platform a client has not connected
-    shows an *_error note instead of a number. Pass `clients` to limit the set."""
+    """Report per-client KPIs across all platforms plus a rolled-up total.
+    Use to get the portfolio scoreboard across every client at once.
+
+    Returns: days, per_client, rollup.
+    Setup: uses whatever platforms are connected (run setup_check).
+    Example: `clients_overview(days=...)`.
+    """
     reg = _load_clients().get("clients", {}) or {}
     names = clients or list(reg.keys())
     if not names:
@@ -1928,10 +2103,13 @@ def _mask(v: str) -> str:
 
 @mcp.tool()
 def setup_instructions(platform: str | None = None) -> dict:
-    """Plain-language, no-terminal setup you can do entirely in chat. Returns what
-    to get from each platform and the exact phrase to say to connect it. Call with
-    a platform (google_ads, meta, analytics, pagespeed) for one, or no argument for
-    all. The .env file is written for you; you never edit it by hand."""
+    """Return plain-language, no-terminal setup steps you can do entirely in chat.
+    Use to get the guided in-chat path to connect a platform.
+
+    Returns: google_ads, meta, analytics, pagespeed, works_now.
+    Setup: no setup.
+    Example: `setup_instructions(platform=...)`.
+    """
     steps = {
         "works_now": "seo_audit, autocomplete_suggestions, cluster_keywords, and trend_index "
                      "need no setup. pagespeed works too (a free key raises its quota).",
@@ -1971,10 +2149,13 @@ def setup_instructions(platform: str | None = None) -> dict:
 def connect_google_ads(developer_token: str, customer_id: str, client_id: str = "",
                        client_secret: str = "", refresh_token: str = "",
                        login_customer_id: str = "") -> dict:
-    """Connect Google Ads from chat (no .env editing). Saves the credentials to the
-    local .env, applies them immediately, and confirms by listing accounts. You can
-    omit client_id/secret/refresh_token if you already ran connect_google_ads_oauth.
-    customer_id is the 10-digit Ads account id."""
+    """Connect Google Ads from chat by saving the credentials, no .env editing.
+    Use to set up Google Ads without touching files.
+
+    Returns: saved, developer_token, customer_id, verified, check.
+    Setup: no setup.
+    Example: `connect_google_ads(developer_token=...)`.
+    """
     up = {"GOOGLE_ADS_DEVELOPER_TOKEN": developer_token,
           "GOOGLE_ADS_CUSTOMER_ID": str(customer_id).replace("-", "")}
     if client_id:
@@ -1996,10 +2177,13 @@ def connect_google_ads(developer_token: str, customer_id: str, client_id: str = 
 
 @mcp.tool()
 def connect_google_ads_oauth(client_id: str, client_secret: str) -> dict:
-    """Get the Google Ads refresh token by approving in a browser, with no terminal
-    command. A browser window opens; approve with the Google account that has Ads
-    access, and the client id, secret, and refresh token are saved to .env. Then
-    call connect_google_ads with your developer token and customer id."""
+    """Get the Google Ads refresh token by approving in a browser.
+    Use to get the refresh token when you have the client id and secret.
+
+    Returns: saved, refresh_token, next.
+    Setup: no setup.
+    Example: `connect_google_ads_oauth(client_id=...)`.
+    """
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
     except ImportError:
@@ -2024,8 +2208,13 @@ def connect_google_ads_oauth(client_id: str, client_secret: str) -> dict:
 
 @mcp.tool()
 def connect_meta(access_token: str) -> dict:
-    """Connect Meta Ads from chat (no .env editing). Saves the access token, applies
-    it immediately, and confirms by listing ad accounts."""
+    """Connect Meta Ads from chat by saving the access token.
+    Use to set up Meta without touching files.
+
+    Returns: saved, token, verified, check.
+    Setup: no setup.
+    Example: `connect_meta(access_token=...)`.
+    """
     _write_env({"META_ACCESS_TOKEN": access_token})
     chk = meta_list_ad_accounts()
     ok = "accounts" in chk
@@ -2036,10 +2225,13 @@ def connect_meta(access_token: str) -> dict:
 
 @mcp.tool()
 def connect_analytics(service_account_json: str) -> dict:
-    """Connect GA4 and Search Console from chat by pasting the service-account JSON
-    key contents (no file handling). Writes the key to a local file, points
-    GOOGLE_APPLICATION_CREDENTIALS at it, and returns the service-account email to
-    add as a Viewer on the GA4 property and a user on the Search Console property."""
+    """Connect GA4 and Search Console from chat by pasting the service-account key.
+    Use to set up both Google analytics platforms at once.
+
+    Returns: saved, service_account_email, next.
+    Setup: no setup.
+    Example: `connect_analytics(service_account_json=...)`.
+    """
     try:
         data = json.loads(service_account_json)
         email = data.get("client_email", "")
@@ -2057,7 +2249,13 @@ def connect_analytics(service_account_json: str) -> dict:
 
 @mcp.tool()
 def set_pagespeed_key(api_key: str) -> dict:
-    """Save a free PageSpeed Insights API key from chat (raises the pagespeed quota)."""
+    """Save a free PageSpeed Insights API key from chat.
+    Use to raise the pagespeed rate quota.
+
+    Returns: saved, key.
+    Setup: no setup.
+    Example: `set_pagespeed_key(api_key=...)`.
+    """
     _write_env({"PAGESPEED_API_KEY": api_key})
     return {"saved": True, "key": _mask(api_key)}
 
@@ -2138,11 +2336,75 @@ def _platform_status(live: bool = False) -> dict:
 
 @mcp.tool()
 def setup_check(live: bool = False) -> dict:
-    """Report which platforms are configured and ready (keyword research, trends,
-    Google Ads, Meta, GA4) and the next step for any that are not. Pass live=true
-    to also ping the configured platforms (list their accounts) to confirm the
-    credentials actually work. Run this first when setting up."""
+    """Report which platforms are configured and ready, and the next step for each that is not.
+    Use to see what is connected and what to do next (run first).
+
+    Returns: google_ads, meta_ads, ga4, search_console, ready, next_step.
+    Setup: uses whatever platforms are connected (run setup_check).
+    Example: `setup_check(live=...)`.
+    """
     return _platform_status(live)
+
+
+# ---------------------------------------------------------------------------
+# Standardized workflow prompts. The common multi-tool sequences as one entry
+# point each, so a user invokes the workflow by name instead of remembering the
+# tool order. Each returns a plan that names the real tools to run.
+# ---------------------------------------------------------------------------
+
+@mcp.prompt()
+def full_seo_review(url: str) -> str:
+    """Full SEO review of one URL using the no-setup tools, then a ranked fix list."""
+    return (
+        "Run a full SEO review of " + url + " with these tools in order, then summarize:\n"
+        "1. seo_score for " + url + " (headline 0-100 score and grade).\n"
+        "2. seo_audit for " + url + " (title, meta, headings, alt text, on-page issues).\n"
+        "3. http_check for " + url + " (HTTPS, redirect chain, security headers, response time).\n"
+        "4. content_analysis for " + url + " (readability, keyword density, heading outline).\n"
+        "5. check_links for " + url + " (broken 4xx/5xx links).\n"
+        "Then give the top five fixes ordered by impact, each tied to the finding that supports it. "
+        "All five tools need no setup."
+    )
+
+
+@mcp.prompt()
+def keyword_plan(seed_keywords: str, locations: str = "") -> str:
+    """Keyword plan from seed terms: research, cluster into themes, add trend direction."""
+    loc = (" for locations: " + locations) if locations else ""
+    return (
+        "Build a keyword plan from these seeds: " + seed_keywords + loc + ".\n"
+        "1. keyword_research with seed_keywords=" + seed_keywords + " (ideas + volume + intent, ranked).\n"
+        "2. cluster_keywords on the returned terms (group into themes by shared token).\n"
+        "3. trend_index on the top theme heads (rising vs falling interest).\n"
+        "Output a short plan: the theme clusters, the highest priority (volume x intent) terms per cluster, "
+        "and which themes are trending up. keyword_research needs Google Ads (run connect_google_ads); "
+        "cluster_keywords and trend_index need no setup."
+    )
+
+
+@mcp.prompt()
+def client_rollup() -> str:
+    """Cross-platform KPI rollup across every configured client."""
+    return (
+        "Give a portfolio rollup across all configured clients.\n"
+        "1. clients_overview (per-client KPIs across Ads, Meta, GA4, Search Console, plus a combined total).\n"
+        "Then summarize: which clients are up or down week over week, any platform returning 'needs setup', "
+        "and the one action per client that matters most. Uses whatever platforms are connected "
+        "(run setup_check first if unsure)."
+    )
+
+
+@mcp.prompt()
+def connect_what_i_have() -> str:
+    """Find out what is connected and walk through connecting the rest, from chat."""
+    return (
+        "Help me connect the marketing platforms from chat, no terminal.\n"
+        "1. setup_check to report which platforms are ready and which are not.\n"
+        "2. For each one not ready, walk me through the matching connect tool: connect_google_ads for "
+        "Google Ads, connect_meta for Meta, connect_analytics for GA4 and Search Console, "
+        "set_pagespeed_key for the PageSpeed quota.\n"
+        "Ask me only for the one credential each step needs, in plain language."
+    )
 
 
 if __name__ == "__main__":
