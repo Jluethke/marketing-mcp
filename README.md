@@ -8,20 +8,27 @@ rollup. Works with Claude Desktop and Claude Code.
 Each platform is independent: a tool returns a clear "needs setup" note until its
 credentials are present, and several tools work with no setup at all.
 
+## License
+
+Proprietary and confidential. Copyright (c) 2026 The Wayfinder Trust. See
+`LICENSE`. Licensed only under a separate written agreement. There is no public
+distribution, and possession of a copy conveys no rights.
+
 ## Install
 
-**macOS / Linux** (needs Python 3.10+; on macOS `brew install python@3.11`):
+Supplied to licensees as a source archive or through a private repository grant.
+Python 3.10+ required.
+
+**macOS / Linux** (on macOS `brew install python@3.11`):
 
 ```
-git clone https://github.com/Jluethke/marketing-mcp.git
 cd marketing-mcp
 bash install.sh
 ```
 
-**Windows** (needs Python 3.10+ from python.org):
+**Windows** (Python 3.10+ from python.org):
 
 ```
-git clone https://github.com/Jluethke/marketing-mcp.git
 cd marketing-mcp
 install.bat
 ```
@@ -50,6 +57,11 @@ Start here to confirm it runs, before connecting anything:
 - `http_check` — redirect chain, HTTPS, security headers, response time, mixed content.
 - `validate_schema` — open the page's JSON-LD and flag missing recommended fields.
 - `robots_sitemap` — read robots.txt and discover the sitemap's URLs.
+- `growth_signals` — the growth stack a site runs today: ad pixels, affiliate and
+  analytics tools, social profiles, and what its robots.txt tells each AI crawler.
+  Try: "growth_signals for https://example.com".
+- `growth_teardown` — name a company's domain, get a dated timeline of its growth
+  moves read from archived copies of its homepage. Try: "growth_teardown for example.com".
 - `autocomplete_suggestions` — Google autocomplete for a phrase. Try:
   "autocomplete_suggestions for 'plumber near me'".
 - `cluster_keywords` — group a keyword list into themes.
@@ -185,7 +197,28 @@ To use the tools you also need:
    Insights API".
 2. APIs & Services -> Credentials -> Create Credentials -> API key. Copy it.
 
-## Tools (53)
+## Tools (55)
+
+**Growth teardown (no setup; reads the site and the Internet Archive from your machine)**
+- `growth_signals` — read a site's homepage, tag-manager container, robots.txt and
+  llms.txt, and report by lane: ads and tracking (Google Ads, Meta, TikTok, LinkedIn,
+  Reddit, Microsoft, X, Pinterest pixels and attribution tools), affiliates and
+  referral programs, analytics, lifecycle and CRM tools, experimentation, social
+  profiles, site sections grouped by growth play, AI-search readiness (llms.txt,
+  per-crawler robots rules, answer schema), the numbers the site states about itself,
+  and the sitemap by section. A site behind a bot wall is read from its newest
+  archived copy, and `source` says so.
+- `growth_teardown` — sample archived copies of a domain's homepage across `years`
+  (up to `max_snapshots`), run the same reading on each, and return a timeline: each
+  signal with the snapshot it was first seen in and the last snapshot it was absent
+  from, plus homepage title changes, the first archive capture of llms.txt and of
+  each named section's own page (`page_first_archived`, an exact date), and new
+  URLs per quarter when the archive index returns the site's URL list. Every
+  first-seen date is a bracket between two snapshots. Funding, revenue and ad spend are listed under
+  `not_covered`, never estimated.
+- `growth_blueprint` (workflow prompt) — one entry point that chains
+  `growth_teardown`, `growth_signals`, `trend_index`, `meta_ad_library` and a news
+  search for funding dates into one timeline by lane, each row tied to its source.
 
 **SEO / site (no setup; PageSpeed is a free Google API)**
 - `seo_score` — one 0-100 health score and letter grade, rolled up from the

@@ -1,4 +1,5 @@
-# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Wayfinder Trust - Jonathan Luethke
+# All Rights Reserved. Proprietary and Confidential.
 """Marketing MCP server.
 
 One MCP server combining the full feature surface of the public Google Ads /
@@ -46,6 +47,12 @@ keyword research:
     check_links                 broken-link checker
     seo_score                   one 0-100 health score + grade
 
+  GROWTH TEARDOWN (no auth; site HTML + Internet Archive; logic in growth.py)
+    growth_signals              a site's growth stack today: ad pixels, affiliate and
+                                analytics tools, social profiles, AI-search readiness
+    growth_teardown             dated timeline of a company's growth moves, read from
+                                archived copies of its homepage
+
 Auth'd tools return a clear setup error until their credentials are configured;
 the no-auth tools run with no setup. Run: python server.py  (stdio transport).
 """
@@ -58,6 +65,8 @@ import re
 from collections import Counter, defaultdict
 
 from mcp.server.fastmcp import FastMCP
+
+import growth
 
 # Auto-load a .env placed next to this server, so credentials need no manual
 # wiring into the MCP config. No-op if python-dotenv or the file is absent.
@@ -74,7 +83,7 @@ mcp = FastMCP("marketing-mcp")
 _GEO = {"US": "2840", "CA": "2124", "GB": "2826", "UK": "2826", "AU": "2036",
         "IN": "2356", "DE": "2276", "FR": "2250", "ES": "2724", "IE": "2372"}
 _LANG = {"en": "1000", "es": "1003", "fr": "1002", "de": "1001", "pt": "1014", "it": "1004"}
-_UA = "Mozilla/5.0 (compatible; marketing-mcp/1.0; +https://github.com/Jluethke/marketing-mcp)"
+_UA = "Mozilla/5.0 (compatible; marketing-mcp/1.0; +https://wayfindersystemsgroup.com)"
 
 
 def _geo_res(geo: str) -> str:
@@ -722,6 +731,9 @@ def seo_audit(url: str) -> dict:
         return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
     except Exception as e:  # noqa: BLE001
         return {"error": "fetch failed: " + str(e)}
+    bad = _unreadable(r)
+    if bad:
+        return bad
     return _page_audit(r, soup)
 
 
@@ -734,6 +746,60 @@ def _fetch_soup(url: str):
     r = httpx.get(url, timeout=20.0, follow_redirects=True,
                   headers={"User-Agent": _UA})
     return r, BeautifulSoup(r.text, "html.parser")
+
+
+# Status codes that mean "we were turned away at the door", not "this page is
+# bad". A WAF answering 403 or 429 serves a challenge page whose markup has no
+# title, no h1, no description and about nine words on it, so auditing that
+# response scores the wall and reports it as the customer's site. Verified
+# 2026-09-09 against two sites behind Cloudflare that return 200 in a browser:
+# seo_score called both of them a 73/C and listed seven specific defects, every
+# one of which described the block page.
+_WALL_CODES = {401, 403, 406, 409, 418, 429, 503}
+
+
+def _unreadable(r) -> dict | None:
+    """None when the response is a page we may audit, else why we may not.
+
+    Anything outside 2xx is refused rather than audited. A 404 or a 500 is a
+    real finding about that URL and is reported as one, but it is not a page
+    whose title and word count mean anything, and a caller who reads those
+    numbers out to the site's owner is wrong in front of them.
+    """
+    code = getattr(r, "status_code", None)
+    if code is None:
+        return {"error": "no HTTP response", "readable": False}
+    if 200 <= code < 300:
+        return None
+    final = str(getattr(r, "url", "") or "")
+    server_hdr = ""
+    try:
+        server_hdr = (r.headers.get("server") or "").lower()
+    except Exception:  # noqa: BLE001
+        pass
+    if code in _WALL_CODES:
+        who = server_hdr or "the site's firewall"
+        return {
+            "status_code": code, "url": final, "readable": False,
+            "blocked": True,
+            "error": (f"blocked before the page could be read (HTTP {code} from "
+                      f"{who}). This is a bot wall, not a defect in the site, and "
+                      "the site may well load normally in a browser. No audit was "
+                      "run and no score is reported, because scoring the block "
+                      "page would describe the wall rather than the site."),
+        }
+    if code == 404:
+        return {"status_code": code, "url": final, "readable": False,
+                "blocked": False,
+                "error": "that URL returns 404. The page does not exist, so there "
+                         "is nothing on it to audit."}
+    if code >= 500:
+        return {"status_code": code, "url": final, "readable": False,
+                "blocked": False,
+                "error": f"the server returned HTTP {code}. The site is erroring, "
+                         "so there is no page to audit."}
+    return {"status_code": code, "url": final, "readable": False, "blocked": False,
+            "error": f"HTTP {code}, which is not a readable page."}
 
 
 def _page_audit(r, soup) -> dict:
@@ -960,6 +1026,9 @@ def content_analysis(url: str, focus_keyword: str | None = None) -> dict:
         return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
     except Exception as e:  # noqa: BLE001
         return {"error": "fetch failed: " + str(e)}
+    bad = _unreadable(r)
+    if bad:
+        return bad
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     title = soup.title.string.strip() if (soup.title and soup.title.string) else ""
@@ -1045,6 +1114,9 @@ def validate_schema(url: str) -> dict:
         return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
     except Exception as e:  # noqa: BLE001
         return {"error": "fetch failed: " + str(e)}
+    bad = _unreadable(r)
+    if bad:
+        return bad
     blocks = soup.find_all("script", attrs={"type": "application/ld+json"})
     items, invalid = [], 0
 
@@ -1231,6 +1303,12 @@ def crawl_site(start_url: str, max_pages: int = 20, use_sitemap: bool = True) ->
             errors += 1
             rows.append({"url": u, "status_code": None, "error": "fetch failed"})
             continue
+        bad = _unreadable(r)
+        if bad:
+            errors += 1
+            rows.append({"url": u, "status_code": bad.get("status_code"),
+                         "error": bad["error"], "blocked": bad.get("blocked", False)})
+            continue
         a = _page_audit(r, soup)
         rows.append({"url": a["url"], "status_code": a["status_code"], "title": a["title"],
                      "word_count": a["word_count"], "issue_count": len(a["issues"]),
@@ -1266,6 +1344,9 @@ def check_links(url: str, scope: str = "all", limit: int = 50) -> dict:
         return {"error": "beautifulsoup4 not installed. Run: pip install beautifulsoup4"}
     except Exception as e:  # noqa: BLE001
         return {"error": "fetch failed: " + str(e)}
+    bad = _unreadable(r)
+    if bad:
+        return bad
     host = urlparse(str(r.url)).netloc
     seen_set, targets = set(), []
     for a in soup.find_all("a", href=True):
@@ -1284,7 +1365,14 @@ def check_links(url: str, scope: str = "all", limit: int = 50) -> dict:
         targets.append((absu, internal))
         if len(targets) >= limit:
             break
-    broken, checked = [], 0
+    # A 403 or a 429 from somebody else's host is that host refusing a bot, not
+    # a dead link. Yelp, Facebook and most WAF'd sites answer 403 to any
+    # scripted client and 200 to a browser, so counting them as broken tells a
+    # site owner their working links are broken. Verified 2026-09-09: two of
+    # three "broken" links found across four law-firm sites were a Yelp profile
+    # and a vendor terms page, both 403 to a script and both fine in a browser.
+    # These are reported separately as unverifiable, never as broken.
+    broken, blocked, checked = [], [], 0
     with httpx.Client(timeout=8.0, follow_redirects=True, headers={"User-Agent": _UA}) as client:
         for absu, internal in targets:
             checked += 1
@@ -1294,12 +1382,20 @@ def check_links(url: str, scope: str = "all", limit: int = 50) -> dict:
                     resp = client.get(absu)  # some servers reject HEAD; confirm with GET
                 code = resp.status_code
             except Exception as e:  # noqa: BLE001
-                broken.append({"url": absu, "internal": internal, "status": None, "error": str(e)[:80]})
+                broken.append({"url": absu, "internal": internal, "status": None,
+                               "error": str(e)[:80]})
                 continue
-            if code >= 400:
-                broken.append({"url": absu, "internal": internal, "status": code})
+            if code < 400:
+                continue
+            if code in _WALL_CODES and not internal:
+                blocked.append({"url": absu, "internal": internal, "status": code,
+                                "note": "that host refuses automated requests; "
+                                        "the link is probably fine in a browser"})
+                continue
+            broken.append({"url": absu, "internal": internal, "status": code})
     return {"url": str(r.url), "scope": scope, "links_checked": checked,
-            "broken_count": len(broken), "broken": broken}
+            "broken_count": len(broken), "broken": broken,
+            "blocked_count": len(blocked), "blocked_external": blocked}
 
 
 @mcp.tool()
@@ -2347,6 +2443,57 @@ def setup_check(live: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Growth teardown. Name a company, read back the growth moves it made and when.
+# The detectors and the archive reading live in growth.py; these two tools fetch
+# the live inputs and hand them over.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def growth_signals(url: str) -> dict:
+    """Read the growth stack a site runs today: ad pixels, affiliate and analytics tools, social profiles, site sections, and AI-search readiness.
+    Use to see which channels a company is working before a teardown, a pitch, or a competitor comparison.
+
+    Returns: site, source, ads_tracking, affiliates_referral, analytics_product, lifecycle_crm, experimentation, tag_manager, social, sections, aeo, stated_numbers, sitemap, not_covered, caveats.
+    Setup: no setup (a site behind a bot wall is read from its newest archived copy, and source says so).
+    Example: `growth_signals(url='https://example.com')`.
+    """
+    import httpx
+    root = _site_root(url)
+    try:
+        r = httpx.get(root + "/", timeout=20.0, follow_redirects=True, headers={"User-Agent": _UA})
+    except Exception as e:  # noqa: BLE001
+        return {"error": "could not reach %s: %s" % (root, str(e)[:160]), "readable": False}
+    bad = _unreadable(r)
+    if bad:
+        if not bad.get("blocked"):
+            return bad
+        # A bot wall is the site refusing this reader, so read the newest
+        # archived copy and say so in the result.
+        ts, page = growth.latest_snapshot(growth.host_of(root), ua=_UA)
+        if ts is None:
+            bad["archive"] = "no archived copy could be read either: " + page
+            return bad
+        return growth.signals_now(root, page, [], ua=_UA, archived_ts=ts)
+    root = _site_root(str(r.url))
+    _, declared = _parse_robots(root)
+    pages, _ = _collect_sitemap_urls(root, declared, limit=2000)
+    return growth.signals_now(root, r.text, pages, ua=_UA)
+
+
+@mcp.tool()
+def growth_teardown(domain: str, years: int = 3, max_snapshots: int = 10, time_budget_s: int = 120) -> dict:
+    """Build a dated timeline of a company's growth moves from archived copies of its homepage: when each ad pixel, affiliate program, analytics tool, social channel, and site section first appeared.
+    Use to reverse-engineer how a company grew, lane by lane, with a date bracket on every move.
+
+    Returns: domain, window, snapshots_read, snapshots_failed, timeline, lanes, present_at_window_start, aeo, site_growth, snapshots, skipped, not_covered, caveats.
+    Setup: no setup (reads the Internet Archive; a run takes up to time_budget_s seconds).
+    Example: `growth_teardown(domain='example.com', years=3, max_snapshots=10)`.
+    """
+    return growth.teardown(domain, years=years, max_snapshots=max_snapshots,
+                           time_budget_s=time_budget_s, ua=_UA)
+
+
+# ---------------------------------------------------------------------------
 # Standardized workflow prompts. The common multi-tool sequences as one entry
 # point each, so a user invokes the workflow by name instead of remembering the
 # tool order. Each returns a plan that names the real tools to run.
@@ -2404,6 +2551,28 @@ def connect_what_i_have() -> str:
         "Google Ads, connect_meta for Meta, connect_analytics for GA4 and Search Console, "
         "set_pagespeed_key for the PageSpeed quota.\n"
         "Ask me only for the one credential each step needs, in plain language."
+    )
+
+
+@mcp.prompt()
+def growth_blueprint(company: str, domain: str = "") -> str:
+    """Reverse-engineer a company's growth: a dated timeline by lane, every row tied to its source."""
+    dom = domain or ("the primary domain of " + company)
+    return (
+        "Reverse-engineer how " + company + " grew. Use these tools in order:\n"
+        "1. growth_teardown with domain=" + dom + " (dated first-seen brackets for ad pixels, affiliate "
+        "programs, analytics tools, social channels and site sections, plus new URLs per quarter).\n"
+        "2. growth_signals for the same site (the stack running today, including tags inside the tag manager, "
+        "llms.txt, and what robots.txt tells each AI crawler).\n"
+        "3. trend_index with keywords=[" + company + "] and timeframe='today 5-y' (when brand search interest moved).\n"
+        "4. meta_ad_library with search_terms=" + company + " (live ad creative; skip this step if Meta is not connected).\n"
+        "5. A web search for funding rounds and launch dates, one source link per date.\n"
+        "Then lay out one timeline with these lanes: Ads and tracking, Social media, Search and SEO, "
+        "AI search (AEO), Affiliates and referral, Fundraising. Each row carries its date or date bracket and "
+        "the tool or link it came from. Where a tool lists something under not_covered or skipped, write "
+        "'no public signal' in that cell and leave it empty of estimates. Close with the three moves that "
+        "preceded the steepest growth in new URLs or brand interest, and which of them a small team can copy. "
+        "Steps 1 to 3 need no setup."
     )
 
 

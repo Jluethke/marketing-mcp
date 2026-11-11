@@ -155,6 +155,11 @@ property string as `site_url` (e.g. `https://example.com/` or `sc-domain:example
 shares a small keyless quota; set `PAGESPEED_API_KEY` (a free Google Cloud API
 key) for reliable use.
 
+`growth_signals` and `growth_teardown` also need no credentials. Both run on your
+machine and read public pages only: the site itself and the Internet Archive.
+`growth_teardown` takes up to `time_budget_s` seconds (120 by default) because the
+archive answers slowly; it reports any part it skipped.
+
 ---
 
 ## Step 4 - Wire into Claude
