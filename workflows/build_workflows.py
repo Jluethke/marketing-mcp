@@ -389,17 +389,29 @@ FLOWS = [
               "The set holds about fifteen questions.",
               "'Who is the best water heater installer in Hoboken?'",
               [("No competitors", "The set has no comparison questions.")]),
-    tool_flow("visibility-ask", "Ask an AI Assistant the Buyer Questions in a Clean Session",
-              "Ask each buyer question in its own fresh API session with web search on, and keep each answer with "
-              "the links it cited.",
-              ["ai-search", "measurement"],
-              [("question_set", "object", True, "Output of `visibility-questions`.")],
-              [("answers", "object[]", "Rows: `question`, `answer`, `cited_urls`.")],
-              [call("ask_assistant", "asked", questions="$question_set.questions")],
-              {"answers": "$asked.answers"},
-              "Every question has an answer or a recorded error.",
-              "Fifteen questions asked, fifteen answers with 3 to 6 cited links each.",
-              [("No API key", "The run stops and names set_anthropic_key.")]),
+    assistant_flow("visibility-ask", "Ask the Buyer Questions in Clean Sessions",
+                   "Have each buyer question answered in a session that has never seen this chat, with web search "
+                   "on, and keep each answer with the links it relied on.",
+                   ["ai-search", "measurement"],
+                   [("question_set", "object", True, "Output of `visibility-questions`.")],
+                   [("answers", "object[]", "Rows: `question`, `answer`, `cited_urls`.")],
+                   [("Ask", ["`question_set` holds the questions."],
+                     ["The answers must not come from this chat, which already knows the business. In Claude Code, "
+                      "hand the questions to fresh subagents (the Agent tool with the Explore type, which starts "
+                      "without this conversation or the project's instructions), at most five questions per subagent "
+                      "and at most three subagents. Tell each subagent only: answer each question as a helpful "
+                      "assistant would answer anyone, search the web for each, name the companies the searches "
+                      "support, list the source URLs, and read no local files. Never mention which business is "
+                      "being measured.",
+                      "Where subagents are not available and an Anthropic API key is saved, call `ask_assistant` "
+                      "with the questions instead; it asks each one in a fresh API session with web search on."],
+                     "One answer per question.", ["Every question in `question_set` has an answer."]),
+                    ("Collect", ["Answers exist."],
+                     ["Build `answers` as rows of `question`, the full `answer` text as given, and `cited_urls`."],
+                     "`answers`.", ["No answer is edited or summarized."])],
+                   "Fifteen questions over three subagents; each answer names three to eight vendors with its sources.",
+                   [("A subagent fails", "Ask its questions again in a new subagent.")],
+                   ["`answers` covers every question."]),
     tool_flow("visibility-record", "Record an AI Visibility Run and Compare It",
               "Log whether each answer named the business, its position and the competitors named, then compare "
               "with earlier runs.",

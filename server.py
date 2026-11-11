@@ -2354,14 +2354,14 @@ def _platform_status(live: bool = False) -> dict:
         "email_and_copy": {"ready": True,
                            "tools": ["email_auth_check", "verify_email", "dmarc_report", "classify_replies",
                                      "send_window", "copy_check"]},
-        "ai_visibility": {"ready": _has_module("anthropic") and bool(os.environ.get("ANTHROPIC_API_KEY")
-                                                                    or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
+        "ai_visibility": {"ready": True,
                           "tools": ["visibility_questions", "ask_assistant", "visibility_record",
                                     "visibility_report"],
-                          "next_step": ("pip install anthropic" if not _has_module("anthropic")
-                                        else None if (os.environ.get("ANTHROPIC_API_KEY")
-                                                      or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
-                                        else "save an Anthropic API key with set_anthropic_key")},
+                          "questions_answered_by": ("fresh Claude Code subagents; ask_assistant is also ready"
+                                                    if (_has_module("anthropic") and (os.environ.get("ANTHROPIC_API_KEY")
+                                                        or os.environ.get("ANTHROPIC_AUTH_TOKEN")))
+                                                    else "fresh Claude Code subagents (ask_assistant needs an "
+                                                         "Anthropic key, optional, set_anthropic_key)")},
         "workflows": {"ready": True, "count": len(workflows.list_chain_names()),
                       "tools": ["list_workflows", "run_workflow", "continue_workflow"]},
     }
@@ -2812,10 +2812,10 @@ def visibility_report(business: str, assistant: str | None = None) -> dict:
 @mcp.tool()
 def ask_assistant(questions: list, model: str | None = None) -> dict:
     """Ask Claude each buyer question in its own fresh API session with web search on, and return each answer with the links it cited.
-    Use to measure AI visibility without the current chat's context leaking into the answers (feed the result to visibility_record).
+    Use where Claude Code subagents are not available to answer the buyer questions; the answers carry none of the current chat's context (feed them to visibility_record).
 
     Returns: answers, asked, failed, model, method.
-    Setup: needs an Anthropic API key (run set_anthropic_key).
+    Setup: optional Anthropic API key (run set_anthropic_key); in Claude Code the workflow uses fresh subagents instead.
     Example: `ask_assistant(questions=['Who is the best roofer in Austin?'])`.
     """
     return ai_ask.ask_all(questions, model=model)

@@ -5,9 +5,10 @@
 There is no rank tracker for answer engines. The method: ask an assistant about
 fifteen buyer questions, each in a clean session, log whether the business is named,
 where it sits, and who else appears, and watch the share of answer move over time.
-This module generates the question set and scores the answers; ai_ask.ask_all asks
-the questions, one fresh API session each with web search on, so no step is done by
-hand.
+This module generates the question set and scores the answers. The questions are
+answered in sessions that have never seen the user's chat: fresh Claude Code
+subagents with web search, or, with an API key saved, ai_ask.ask_all, one fresh API
+session per question. No step is done by hand.
 
   visibility_questions   a balanced, deterministic buyer-question set plus the
                          instructions for running it
@@ -63,32 +64,39 @@ def _save_store(d: dict) -> None:
 def build_questions(business: str, service: str, city: str | None = None,
                     competitors=None, extra_questions=None, count: int = 15) -> list:
     """A balanced, deterministic buyer-question set. Best/top provider questions,
-    cost, how to choose, comparisons with any named competitors, problem-first
-    questions, and 'near' phrasings using the city."""
+    cost, how to choose, problem-first questions, comparisons with any named
+    competitors, and the brand's own reputation.
+
+    With a city the set is phrased for a local service ("near me", "who should I
+    call"). Without one it is phrased for a company buying a product or service
+    from a vendor, since 'near me' means nothing to that buyer."""
     svc = (service or "").strip()
-    where = (" in " + city.strip()) if city else ""
     comp = [c for c in (competitors or []) if c and c.strip()]
     q = []
-    # Best / top provider.
-    q.append("What is the best %s%s?" % (svc, where))
-    q.append("Who are the top %s companies%s?" % (svc, where))
-    q.append("Who should I call for %s%s?" % (svc, where))
-    # Cost.
-    q.append("How much does %s cost%s?" % (svc, where))
-    q.append("What is a fair price for %s%s?" % (svc, where))
-    # How to choose.
-    q.append("How do I choose a good %s%s?" % (svc, where))
-    q.append("What should I look for when hiring a %s?" % svc)
-    # Problem-first.
-    q.append("I need help with %s%s, where do I start?" % (svc, where))
-    q.append("Who is a reliable %s%s?" % (svc, where))
-    # Near phrasings using the city.
     if city:
+        where = " in " + city.strip()
+        q.append("What is the best %s%s?" % (svc, where))
+        q.append("Who are the top %s companies%s?" % (svc, where))
+        q.append("Who should I call for %s%s?" % (svc, where))
+        q.append("How much does %s cost%s?" % (svc, where))
+        q.append("What is a fair price for %s%s?" % (svc, where))
+        q.append("How do I choose a good %s%s?" % (svc, where))
+        q.append("What should I look for when hiring a %s?" % svc)
+        q.append("I need help with %s%s, where do I start?" % (svc, where))
+        q.append("Who is a reliable %s%s?" % (svc, where))
         q.append("%s near me in %s" % (svc, city.strip()))
         q.append("Is there a highly rated %s in %s?" % (svc, city.strip()))
     else:
-        q.append("%s near me" % svc)
-        q.append("Is there a highly rated %s nearby?" % svc)
+        q.append("What are the best %s solutions?" % svc)
+        q.append("Which companies provide %s?" % svc)
+        q.append("Which %s vendors should my company evaluate?" % svc)
+        q.append("How much does %s cost?" % svc)
+        q.append("How is %s usually priced?" % svc)
+        q.append("How do I choose a %s vendor?" % svc)
+        q.append("What should I look for in a %s solution?" % svc)
+        q.append("My company needs %s. Where do we start?" % svc)
+        q.append("What is %s, and who offers it?" % svc)
+        q.append("Which %s products are used in regulated industries?" % svc)
     # Comparisons with named competitors.
     for c in comp[:3]:
         q.append("Is %s or %s better for %s?" % (business, c.strip(), svc))
@@ -116,9 +124,11 @@ def visibility_questions(business: str, service: str, city: str | None = None,
     questions are deterministic, so two runs a quarter apart ask the same thing."""
     questions = build_questions(business, service, city, competitors, extra_questions, count)
     instructions = [
-        "Call ask_assistant with these questions: each is asked in its own fresh API session "
-        "with web search on and no history or memory, so the answers reflect the open web.",
-        "Record the run with visibility_record, passing ask_assistant's answers.",
+        "Have the questions answered in sessions that have never seen this chat, with web search "
+        "on. In Claude Code, give them to fresh subagents (Agent tool, Explore type), at most five "
+        "per subagent, without saying which business is measured. Where an Anthropic API key is "
+        "saved, ask_assistant does the same through the API, one fresh session per question.",
+        "Record the run with visibility_record, passing the answers as {question, answer} rows.",
         "Re-run the same set every month. A single snapshot is noise; the trend is the "
         "finding.",
     ]
@@ -252,8 +262,13 @@ def analyze_answer(question: str, answer: str, business: str, aliases=None,
     low = text.lower()
     comp_present = [c for c in comp if _norm_name(c) in low and _norm_name(c) not in biz_norms]
 
+    # A question that names the business (a comparison, a reviews query) is
+    # answered about it by construction, so it measures reputation, not discovery.
+    branded = any(n and re.search(re.escape(n), question or "", re.I) for n in names)
+
     return {
         "question": question,
+        "branded": bool(branded),
         "named": named,
         "position": position,
         "businesses_named_count": len(detect_businesses(text, known=names + comp)),
@@ -276,19 +291,24 @@ def visibility_record(business: str, answers: list, assistant: str = "claude",
         per.append(analyze_answer(q, a, business, aliases, comp))
 
     asked = len(per)
-    named_rows = [r for r in per if r["named"]]
+    # Share of answer counts discovery questions only: those that do not name the
+    # business. Branded questions are reported on their own.
+    discovery = [r for r in per if not r.get("branded")]
+    branded = [r for r in per if r.get("branded")]
+    named_rows = [r for r in discovery if r["named"]]
     positions = [r["position"] for r in named_rows if r["position"]]
-    share = round(len(named_rows) / asked, 3) if asked else 0.0
+    share = round(len(named_rows) / len(discovery), 3) if discovery else 0.0
     avg_pos = round(sum(positions) / len(positions), 2) if positions else None
 
     comp_share = OrderedDict()
     for c in comp:
-        n = sum(1 for r in per if c in r["competitors_present"])
-        comp_share[c] = {"answers": n, "share": round(n / asked, 3) if asked else 0.0}
+        n = sum(1 for r in discovery if c in r["competitors_present"])
+        comp_share[c] = {"answers": n, "share": round(n / len(discovery), 3) if discovery else 0.0}
 
     run = {
         "business": business, "assistant": assistant, "run_date": run_date,
-        "asked": asked, "named": len(named_rows),
+        "asked": asked, "discovery_asked": len(discovery), "branded_asked": len(branded),
+        "named": len(named_rows),
         "share_of_answer": share, "avg_position_when_named": avg_pos,
         "links_to_business": sum(1 for r in per if r["link_to_business"]),
         "competitor_share": comp_share,
@@ -300,10 +320,13 @@ def visibility_record(business: str, answers: list, assistant: str = "claude",
 
     return {
         "business": business, "assistant": assistant, "run_date": run_date,
-        "asked": asked, "named": len(named_rows), "share_of_answer": share,
+        "asked": asked, "discovery_asked": len(discovery), "named": len(named_rows),
+        "share_of_answer": share, "share_basis": "discovery questions (those that do not name the business)",
         "avg_position_when_named": avg_pos,
         "competitor_share": comp_share,
-        "never_named_questions": [r["question"] for r in per if not r["named"]],
+        "never_named_questions": [r["question"] for r in discovery if not r["named"]],
+        "branded_answers": [{"question": r["question"], "named": r["named"],
+                             "link_to_business": r["link_to_business"]} for r in branded],
         "store": _store_path(),
     }
 

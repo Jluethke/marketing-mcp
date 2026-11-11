@@ -12,8 +12,8 @@ into chat:
 - "connect analytics" (paste the service-account JSON contents; covers GA4 and
   Search Console)
 - "set pagespeed key" (optional, paste a free key)
-- "set anthropic key" (optional, paste an Anthropic API key; needed only for
-  `ask_assistant` and the `ai-visibility-baseline` workflow)
+- "set anthropic key" (optional, paste an Anthropic API key; only for
+  `ask_assistant` where subagents are not available, as in Claude Desktop)
 
 Each writes the `.env` for you, applies it without a restart, and confirms by
 pinging the platform. The rest of this document is the manual reference for where
@@ -42,7 +42,7 @@ python doctor.py --live   # also ping the configured platforms
 | Google Ads | 30-60 min | yes (dev token) | keyword volumes, reporting, management |
 | Meta Ads | 15 min | no | Meta campaign reporting + management |
 | GA4 | 10 min | no | site analytics |
-| Anthropic | 2 min | no | AI visibility: buyer questions asked in clean sessions |
+| Anthropic (optional) | 2 min | no | AI visibility outside Claude Code |
 
 Google Ads is the only one with a real wait (the developer-token review). Start
 that application first, then do the others while it is pending.

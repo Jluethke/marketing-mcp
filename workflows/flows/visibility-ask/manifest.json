@@ -15,8 +15,8 @@
   "execution_pattern": "phase_pipeline",
   "price": "0",
   "license": "PRIVATE",
-  "description": "Ask each buyer question in its own fresh API session with web search on, and keep each answer with the links it cited.",
-  "runner": "tool",
+  "description": "Have each buyer question answered in a session that has never seen this chat, with web search on, and keep each answer with the links it relied on.",
+  "runner": "assistant",
   "related_flows": [
     {
       "flow_name": "visibility-questions",
@@ -28,17 +28,5 @@
       "relationship": "feeds_into",
       "description": "outputs consumed by visibility-record"
     }
-  ],
-  "calls": [
-    {
-      "tool": "ask_assistant",
-      "as": "asked",
-      "args": {
-        "questions": "$question_set.questions"
-      }
-    }
-  ],
-  "output_map": {
-    "answers": "$asked.answers"
-  }
+  ]
 }

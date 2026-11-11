@@ -81,8 +81,9 @@ Start here to confirm it runs, before connecting anything:
 - `sitemap_hygiene`, `duplicate_audit`, `assistants_index`, `schema_build`: site
   hygiene and the llms.txt index for AI assistants.
 
-Everything else (live Google Ads / Meta / GA4 / Search Console data, and asking
-Claude buyer questions for AI visibility) needs that platform connected. Run
+AI visibility needs no key either: in Claude Code the buyer questions are answered
+by fresh subagents that have never seen your chat. Everything else (live Google Ads
+/ Meta / GA4 / Search Console data) needs that platform connected. Run
 `setup_check` any time to see what is connected.
 
 ## Workflows
@@ -114,7 +115,7 @@ name), or with the tools:
 | `new-post-links` | internal links for a post that just went live |
 | `client-timeline` | the SEO expectations note a client signs |
 | `prospect-pipeline` | businesses in an area, then a call sheet with real findings |
-| `ai-visibility-baseline` | ask Claude the buyer questions in clean sessions, record who is named, map gaps to pages |
+| `ai-visibility-baseline` | buyer questions answered by fresh subagents with web search, then who is named and the gaps mapped to pages |
 | `content-coverage-map` | page inventory and overlap, then topics, gaps and the next eight posts |
 | `news-anchored-post` | a post anchored to a dated news item, gated |
 | `newsletter-rollup` | the week's posts in one newsletter, gated |
@@ -247,14 +248,18 @@ To use the tools you also need:
    Insights API".
 2. APIs & Services -> Credentials -> Create Credentials -> API key. Copy it.
 
-### Anthropic (for AI visibility: asking buyer questions in clean sessions)
+### Anthropic (optional, for AI visibility outside Claude Code)
+
+Not needed in Claude Code: there the `ai-visibility-baseline` workflow has fresh
+subagents answer the buyer questions, each starting without your chat or the
+project's instructions. Where subagents are not available (Claude Desktop), a key
+lets `ask_assistant` do the same through the API.
 
 `ANTHROPIC_API_KEY`
 1. platform.claude.com -> API keys -> Create key. Copy it.
 2. In chat: "set_anthropic_key with <key>". Each buyer question then goes to Claude
-   as a fresh conversation with web search on and no history, so the answer is not
-   shaped by the chat you are in. Model: `claude-opus-5-5` unless
-   `MARKETING_MCP_ASK_MODEL` names another.
+   as a fresh conversation with web search on and no history. Model:
+   `claude-opus-5-5` unless `MARKETING_MCP_ASK_MODEL` names another.
 
 ## Tools (86)
 
@@ -311,7 +316,7 @@ To use the tools you also need:
 **AI visibility**
 - `visibility_questions`: a fixed set of buyer questions for a business.
 - `ask_assistant`: ask Claude each question in a fresh API session with web search
-  on; needs `ANTHROPIC_API_KEY`.
+  on; optional, for clients without subagents; needs `ANTHROPIC_API_KEY`.
 - `visibility_record`: whether each answer named the business, its position, and
   the competitors named; kept in a local file.
 - `visibility_report`: share of answer over time and the questions never won.

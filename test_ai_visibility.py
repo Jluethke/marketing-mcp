@@ -28,9 +28,19 @@ def test_questions():
     check("how to choose present", "choose" in joined)
     check("city near-phrasing present", "near me" in joined and "austin" in joined)
     check("competitor comparison present", "rival plumbing" in joined)
-    check("instructions mention memory off and search on",
-          any("memory" in s.lower() for s in q["instructions"])
+    check("instructions require a session that never saw this chat, with search on",
+          any("never seen this chat" in s.lower() for s in q["instructions"])
           and any("search" in s.lower() for s in q["instructions"]))
+    check("instructions never hand a step to a person",
+          not any(w in " ".join(q["instructions"]).lower() for w in ("paste", "copy each", "by hand")))
+    vendor = av.build_questions("Acme Software", "contract analytics", None, ["Rival Co"])
+    vjoined = " ".join(vendor).lower()
+    check("without a city the set is vendor-phrased, never 'near me'",
+          "near me" not in vjoined and "vendor" in vjoined)
+    rec = av.analyze_answer("Is Acme Software or Rival Co better?", "Acme Software is fine.", "Acme Software")
+    check("a question naming the business is marked branded", rec["branded"] is True)
+    rec = av.analyze_answer("Which vendors provide contract analytics?", "Rival Co.", "Acme Software")
+    check("a discovery question is not branded", rec["branded"] is False)
 
 
 def test_analyze_answer():
