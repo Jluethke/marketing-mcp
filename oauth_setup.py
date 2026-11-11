@@ -1,4 +1,5 @@
-# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Wayfinder Trust - Jonathan Luethke
+# All Rights Reserved. Proprietary and Confidential.
 """Google Ads OAuth helper. Runs the consent flow once and prints the refresh
 token, which is the single hardest value to obtain in setup. Everything else for
 Google Ads is copy-paste; this is the step that needs a browser.

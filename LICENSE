@@ -1,21 +1,31 @@
-MIT License
+Copyright (c) 2026 The Wayfinder Trust - Jonathan Luethke
+All Rights Reserved.
 
-Copyright (c) 2026 marketing-mcp contributors
+PROPRIETARY AND CONFIDENTIAL
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and its accompanying documentation (the "Software") are the
+confidential and proprietary property of The Wayfinder Trust. The Software is
+licensed, not sold, and only under a separate written agreement signed by The
+Wayfinder Trust.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+No license is granted by this file. Absent a signed written agreement, no person
+or entity may use, copy, modify, merge, publish, distribute, sublicense, sell,
+host, or create derivative works of the Software, in whole or in part, and no
+person or entity may reverse engineer, decompile, or disassemble it.
+
+Possession of a copy conveys no rights. Access provided for evaluation conveys
+no rights beyond the evaluation described in the agreement authorizing it.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+PRIOR RELEASES. Versions of this Software distributed publicly before the date
+of this file were made available under the MIT License. That grant, as to copies
+already received, is not withdrawn by this file and cannot be. This notice
+governs this version and every version after it.
+
+Contact: wayfindersystemsgroup.com

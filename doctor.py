@@ -1,4 +1,5 @@
-# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Wayfinder Trust - Jonathan Luethke
+# All Rights Reserved. Proprietary and Confidential.
 """Setup doctor. Prints per-platform readiness without an MCP client, so you can
 check progress while setting up. Reads the same environment the server reads.
 

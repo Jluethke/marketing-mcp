@@ -1,4 +1,5 @@
-# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Wayfinder Trust - Jonathan Luethke
+# All Rights Reserved. Proprietary and Confidential.
 """Register marketing-mcp into the local Claude config(s).
 
 Adds an `mcpServers` entry named "marketing-mcp" pointing at this repo's venv
