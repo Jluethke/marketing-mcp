@@ -1,0 +1,27 @@
+{
+  "name": "seo-fix-list",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "planning"
+  ],
+  "inputs": [
+    "review_findings"
+  ],
+  "outputs": [
+    "fix_list"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Turn the on-page review results into the five fixes that matter most, each tied to its finding.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "seo-review-checks",
+      "relationship": "fed_by",
+      "description": "provides review_findings needed here"
+    }
+  ]
+}

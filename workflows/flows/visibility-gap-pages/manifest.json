@@ -1,0 +1,29 @@
+{
+  "name": "visibility-gap-pages",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "ai-search",
+    "seo",
+    "content"
+  ],
+  "inputs": [
+    "visibility_run",
+    "business_site"
+  ],
+  "outputs": [
+    "page_actions"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "For each buyer question where the business was never named, name the page that should answer it, check it, and write the change.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "visibility-record",
+      "relationship": "fed_by",
+      "description": "provides visibility_run needed here"
+    }
+  ]
+}

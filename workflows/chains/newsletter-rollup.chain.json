@@ -1,0 +1,144 @@
+{
+  "name": "newsletter-rollup",
+  "description": "Roll the week's posts into one newsletter on a single through-line, gated.",
+  "steps": [
+    {
+      "id": "s1_pages",
+      "skill_name": "site-pages",
+      "inputs": {
+        "business_site": "from_user_input"
+      },
+      "outputs": {
+        "site_pages": "site_pages"
+      },
+      "parallel_group": 1
+    },
+    {
+      "id": "s2_draft",
+      "skill_name": "newsletter-draft",
+      "inputs": {
+        "site_pages": "s1_pages.site_pages",
+        "window_days": "from_user_input_optional"
+      },
+      "outputs": {
+        "newsletter_draft": "newsletter_draft"
+      },
+      "parallel_group": 2
+    },
+    {
+      "id": "s3_gate",
+      "skill_name": "copy-gate",
+      "inputs": {
+        "draft": "s2_draft.newsletter_draft",
+        "house_rules": "from_user_input_optional"
+      },
+      "outputs": {
+        "gated_draft": "gated_draft",
+        "copy_report": "copy_report"
+      },
+      "parallel_group": 3
+    }
+  ],
+  "edges": [
+    {
+      "from_step": "s1_pages",
+      "to_step": "s2_draft",
+      "data_type": "site-pages",
+      "field_mapping": {
+        "site_pages": "site_pages"
+      }
+    },
+    {
+      "from_step": "s2_draft",
+      "to_step": "s3_gate",
+      "data_type": "newsletter-draft",
+      "field_mapping": {
+        "draft": "newsletter_draft"
+      }
+    }
+  ],
+  "entry_inputs": [
+    "business_site",
+    "window_days",
+    "house_rules"
+  ],
+  "terminal_outputs": [
+    "gated_draft",
+    "copy_report"
+  ],
+  "parallel_groups": [
+    [
+      "s1_pages"
+    ],
+    [
+      "s2_draft"
+    ],
+    [
+      "s3_gate"
+    ]
+  ],
+  "estimated_cost": 3,
+  "critical_path": [
+    "s1_pages",
+    "s2_draft",
+    "s3_gate"
+  ],
+  "chain_links": {
+    "prerequisites": [],
+    "next_chains": [],
+    "related_chains": [
+      {
+        "chain_name": "site-diagnosis",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "full-seo-review",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "keyword-plan",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-rollup",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "connect-what-i-have",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "growth-blueprint",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "weekly-seo-loop",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "new-post-links",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-timeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "prospect-pipeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "ai-visibility-baseline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "content-coverage-map",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "news-anchored-post",
+        "relationship": "complement"
+      }
+    ]
+  }
+}

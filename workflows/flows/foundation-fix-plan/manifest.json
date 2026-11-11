@@ -1,0 +1,27 @@
+{
+  "name": "foundation-fix-plan",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "planning"
+  ],
+  "inputs": [
+    "foundation_report"
+  ],
+  "outputs": [
+    "fix_plan"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Order the failures in a foundation report by what blocks discovery first, and write each fix as one action with where it is done and the tool result that confirms it.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "site-foundation-check",
+      "relationship": "fed_by",
+      "description": "provides foundation_report needed here"
+    }
+  ]
+}

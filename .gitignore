@@ -7,3 +7,8 @@ __pycache__/
 clients.json
 location_sets.json
 .venv/
+ai_visibility.json
+workflow_runs.json
+workflow_runs.json.tmp
+covers/
+.pytest_cache/

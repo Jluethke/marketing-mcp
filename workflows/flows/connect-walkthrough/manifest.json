@@ -1,0 +1,26 @@
+{
+  "name": "connect-walkthrough",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "setup"
+  ],
+  "inputs": [
+    "platform_status"
+  ],
+  "outputs": [
+    "connections"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Walk through connecting each platform that is not ready, asking only for the one credential each connect tool needs.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "platform-status",
+      "relationship": "fed_by",
+      "description": "provides platform_status needed here"
+    }
+  ]
+}

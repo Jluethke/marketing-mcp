@@ -1,0 +1,61 @@
+{
+  "name": "keyword-research-pass",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "keyword-research",
+    "paid-search"
+  ],
+  "inputs": [
+    "seed_keywords",
+    "locations"
+  ],
+  "outputs": [
+    "keyword_data"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Expand seed keywords with volume and intent, group the results into themes, and read the trend of the top terms.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "keyword-plan-writeup",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by keyword-plan-writeup"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "keyword_research",
+      "as": "research",
+      "args": {
+        "seed_keywords": "$seed_keywords",
+        "locations": "$locations"
+      }
+    },
+    {
+      "tool": "cluster_keywords",
+      "as": "clusters",
+      "args": {
+        "keywords": "$research.keywords[*].keyword"
+      }
+    },
+    {
+      "tool": "trend_index",
+      "as": "trends",
+      "args": {
+        "keywords": "$research.keywords[*].keyword[:5]"
+      },
+      "optional": true
+    }
+  ],
+  "output_map": {
+    "keyword_data": {
+      "research": "$research",
+      "clusters": "$clusters",
+      "trends": "$trends"
+    }
+  }
+}

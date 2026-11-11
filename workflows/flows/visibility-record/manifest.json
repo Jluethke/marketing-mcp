@@ -1,0 +1,58 @@
+{
+  "name": "visibility-record",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "ai-search",
+    "reporting"
+  ],
+  "inputs": [
+    "business_name",
+    "answers",
+    "competitors"
+  ],
+  "outputs": [
+    "visibility_run"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Log whether each answer named the business, its position and the competitors named, then compare with earlier runs.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "visibility-ask",
+      "relationship": "fed_by",
+      "description": "provides answers needed here"
+    },
+    {
+      "flow_name": "visibility-gap-pages",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by visibility-gap-pages"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "visibility_record",
+      "as": "run",
+      "args": {
+        "business": "$business_name",
+        "answers": "$answers",
+        "competitors": "$competitors"
+      }
+    },
+    {
+      "tool": "visibility_report",
+      "as": "history",
+      "args": {
+        "business": "$business_name"
+      }
+    }
+  ],
+  "output_map": {
+    "visibility_run": {
+      "run": "$run",
+      "history": "$history"
+    }
+  }
+}

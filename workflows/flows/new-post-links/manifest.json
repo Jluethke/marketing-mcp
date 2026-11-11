@@ -1,0 +1,35 @@
+{
+  "name": "new-post-links",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "internal-linking"
+  ],
+  "inputs": [
+    "business_site",
+    "post_url"
+  ],
+  "outputs": [
+    "link_plan"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Find the posts and money page a new post should link to and the older posts that should link to it, each with its anchor sentence.",
+  "runner": "tool",
+  "related_flows": [],
+  "calls": [
+    {
+      "tool": "internal_link_plan",
+      "as": "plan",
+      "args": {
+        "site": "$business_site",
+        "new_post_url": "$post_url"
+      }
+    }
+  ],
+  "output_map": {
+    "link_plan": "$plan"
+  }
+}

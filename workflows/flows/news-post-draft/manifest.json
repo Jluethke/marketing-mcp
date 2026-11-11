@@ -1,0 +1,33 @@
+{
+  "name": "news-post-draft",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "content",
+    "blogging"
+  ],
+  "inputs": [
+    "news_item",
+    "owner_notes"
+  ],
+  "outputs": [
+    "post_draft"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Write what happened, what it changes for customers and what to do, with the owner's own detail.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "news-anchor",
+      "relationship": "fed_by",
+      "description": "provides news_item needed here"
+    },
+    {
+      "flow_name": "copy-gate",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by copy-gate"
+    }
+  ]
+}

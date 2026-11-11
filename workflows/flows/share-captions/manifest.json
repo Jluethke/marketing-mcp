@@ -1,0 +1,29 @@
+{
+  "name": "share-captions",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "social-media",
+    "content"
+  ],
+  "inputs": [
+    "gated_draft",
+    "profiles",
+    "post_url"
+  ],
+  "outputs": [
+    "captions"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Write one caption with the link for each public profile the business has and for its Business Profile, each passing the copy check.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "copy-gate",
+      "relationship": "fed_by",
+      "description": "provides gated_draft needed here"
+    }
+  ]
+}

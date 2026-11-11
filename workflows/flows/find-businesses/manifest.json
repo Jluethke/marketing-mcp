@@ -1,0 +1,48 @@
+{
+  "name": "find-businesses",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "lead-generation",
+    "prospecting"
+  ],
+  "inputs": [
+    "area",
+    "category"
+  ],
+  "outputs": [
+    "prospects",
+    "source_counts"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Pull independent businesses of one category in one area from OpenStreetMap, with website and phone where listed and chains dropped.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "call-sheet",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by call-sheet"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "find_businesses",
+      "as": "found",
+      "args": {
+        "area": "$area",
+        "category": "$category"
+      }
+    }
+  ],
+  "output_map": {
+    "prospects": "$found.businesses",
+    "source_counts": {
+      "found": "$found.found",
+      "with_website": "$found.with_website",
+      "with_phone": "$found.with_phone",
+      "attribution": "$found.attribution"
+    }
+  }
+}

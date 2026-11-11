@@ -1,0 +1,44 @@
+{
+  "name": "visibility-ask",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "ai-search",
+    "measurement"
+  ],
+  "inputs": [
+    "question_set"
+  ],
+  "outputs": [
+    "answers"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Ask each buyer question in its own fresh API session with web search on, and keep each answer with the links it cited.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "visibility-questions",
+      "relationship": "fed_by",
+      "description": "provides question_set needed here"
+    },
+    {
+      "flow_name": "visibility-record",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by visibility-record"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "ask_assistant",
+      "as": "asked",
+      "args": {
+        "questions": "$question_set.questions"
+      }
+    }
+  ],
+  "output_map": {
+    "answers": "$asked.answers"
+  }
+}

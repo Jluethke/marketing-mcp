@@ -1,0 +1,41 @@
+{
+  "name": "call-sheet",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "lead-generation",
+    "sales"
+  ],
+  "inputs": [
+    "prospects",
+    "your_offer"
+  ],
+  "outputs": [
+    "call_sheet"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Audit each prospect's site for one graded finding with evidence and write an opener per prospect that claims nothing the audit did not show.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "find-businesses",
+      "relationship": "fed_by",
+      "description": "provides prospects needed here"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "call_sheet",
+      "as": "sheet",
+      "args": {
+        "prospects": "$prospects",
+        "your_offer": "$your_offer"
+      }
+    }
+  ],
+  "output_map": {
+    "call_sheet": "$sheet"
+  }
+}

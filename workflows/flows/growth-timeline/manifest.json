@@ -1,0 +1,28 @@
+{
+  "name": "growth-timeline",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "growth",
+    "competitive-analysis"
+  ],
+  "inputs": [
+    "growth_evidence",
+    "company"
+  ],
+  "outputs": [
+    "growth_timeline"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Turn growth evidence into one dated timeline by lane, each row tied to its source, and name the moves a small team can copy.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "growth-evidence",
+      "relationship": "fed_by",
+      "description": "provides growth_evidence needed here"
+    }
+  ]
+}

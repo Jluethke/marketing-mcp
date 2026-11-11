@@ -1,0 +1,49 @@
+{
+  "name": "content-inventory",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "content",
+    "audit"
+  ],
+  "inputs": [
+    "business_site"
+  ],
+  "outputs": [
+    "content_inventory"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "List every page with its title and description by section, and find pages that duplicate each other.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "topic-gap-plan",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by topic-gap-plan"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "assistants_index",
+      "as": "index",
+      "args": {
+        "url": "$business_site"
+      }
+    },
+    {
+      "tool": "duplicate_audit",
+      "as": "duplicates",
+      "args": {
+        "start_url": "$business_site"
+      }
+    }
+  ],
+  "output_map": {
+    "content_inventory": {
+      "index": "$index",
+      "duplicates": "$duplicates"
+    }
+  }
+}

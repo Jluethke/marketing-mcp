@@ -1,0 +1,76 @@
+{
+  "name": "site-foundation-check",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "technical-seo",
+    "audit"
+  ],
+  "inputs": [
+    "site_url"
+  ],
+  "outputs": [
+    "foundation_report"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Read robots.txt, the sitemap, HTTPS, click depth, the analytics tag, AI crawler access and the Search Console sitemap status for a site, and return every result with its evidence.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "foundation-fix-plan",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by foundation-fix-plan"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "sitemap_hygiene",
+      "as": "sitemap",
+      "args": {
+        "url": "$site_url"
+      }
+    },
+    {
+      "tool": "http_check",
+      "as": "http",
+      "args": {
+        "url": "$site_url"
+      }
+    },
+    {
+      "tool": "crawl_depth",
+      "as": "depth",
+      "args": {
+        "start_url": "$site_url",
+        "max_pages": 100
+      }
+    },
+    {
+      "tool": "growth_signals",
+      "as": "stack",
+      "args": {
+        "url": "$site_url"
+      }
+    },
+    {
+      "tool": "gsc_list_sitemaps",
+      "as": "search_console",
+      "args": {
+        "site_url": "$site_url"
+      },
+      "optional": true
+    }
+  ],
+  "output_map": {
+    "foundation_report": {
+      "sitemap": "$sitemap",
+      "http": "$http",
+      "depth": "$depth",
+      "stack": "$stack",
+      "search_console": "$search_console"
+    }
+  }
+}

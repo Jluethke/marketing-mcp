@@ -1,0 +1,71 @@
+{
+  "name": "growth-evidence",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "growth",
+    "competitive-analysis"
+  ],
+  "inputs": [
+    "company",
+    "domain"
+  ],
+  "outputs": [
+    "growth_evidence"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Read the dated timeline of a company's growth moves from archived copies of its site, the stack it runs today, brand search interest, and its live ads.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "growth-timeline",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by growth-timeline"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "growth_teardown",
+      "as": "teardown",
+      "args": {
+        "domain": "$domain"
+      }
+    },
+    {
+      "tool": "growth_signals",
+      "as": "today",
+      "args": {
+        "url": "$domain"
+      }
+    },
+    {
+      "tool": "trend_index",
+      "as": "interest",
+      "args": {
+        "keywords": [
+          "$company"
+        ],
+        "timeframe": "today 5-y"
+      },
+      "optional": true
+    },
+    {
+      "tool": "meta_ad_library",
+      "as": "ads",
+      "args": {
+        "search_terms": "$company"
+      },
+      "optional": true
+    }
+  ],
+  "output_map": {
+    "growth_evidence": {
+      "teardown": "$teardown",
+      "today": "$today",
+      "interest": "$interest",
+      "ads": "$ads"
+    }
+  }
+}

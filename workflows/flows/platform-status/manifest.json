@@ -1,0 +1,38 @@
+{
+  "name": "platform-status",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "setup"
+  ],
+  "inputs": [
+    "live_check"
+  ],
+  "outputs": [
+    "platform_status"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Report which platforms are ready and the next step for each one that is not.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "connect-walkthrough",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by connect-walkthrough"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "setup_check",
+      "as": "status",
+      "args": {
+        "live": "$live_check"
+      }
+    }
+  ],
+  "output_map": {
+    "platform_status": "$status"
+  }
+}

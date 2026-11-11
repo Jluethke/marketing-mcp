@@ -1,0 +1,28 @@
+{
+  "name": "topic-gap-plan",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "content",
+    "planning"
+  ],
+  "inputs": [
+    "content_inventory"
+  ],
+  "outputs": [
+    "coverage_map",
+    "post_queue"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Group pages into topics tied to money pages, list the buyer questions no page answers, and order the next eight posts.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "content-inventory",
+      "relationship": "fed_by",
+      "description": "provides content_inventory needed here"
+    }
+  ]
+}

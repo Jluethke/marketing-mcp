@@ -1,0 +1,27 @@
+{
+  "name": "rollup-summary",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "reporting",
+    "agency"
+  ],
+  "inputs": [
+    "portfolio"
+  ],
+  "outputs": [
+    "rollup"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Write the portfolio summary: which clients moved, which platforms need setup, and the one action per client that matters most.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "portfolio-kpis",
+      "relationship": "fed_by",
+      "description": "provides portfolio needed here"
+    }
+  ]
+}

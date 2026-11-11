@@ -1,0 +1,28 @@
+{
+  "name": "keyword-plan-writeup",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "planning",
+    "keyword-research"
+  ],
+  "inputs": [
+    "keyword_data"
+  ],
+  "outputs": [
+    "keyword_plan"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Turn researched, clustered keywords into a plan: the themes, the priority terms per theme, the trending themes, and the paid or organic split.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "keyword-research-pass",
+      "relationship": "fed_by",
+      "description": "provides keyword_data needed here"
+    }
+  ]
+}

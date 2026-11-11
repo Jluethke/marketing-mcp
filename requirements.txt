@@ -7,3 +7,6 @@ pytrends>=4.9.2
 google-analytics-data>=0.18.0
 google-api-python-client>=2.100
 beautifulsoup4>=4.12
+pillow>=10.0
+anthropic>=0.50
+tzdata>=2024.1

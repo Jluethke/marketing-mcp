@@ -1,0 +1,50 @@
+{
+  "name": "copy-gate",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "editing",
+    "quality-gate",
+    "content"
+  ],
+  "inputs": [
+    "draft",
+    "house_rules"
+  ],
+  "outputs": [
+    "gated_draft",
+    "copy_report"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Run the copy check on a draft, rewrite every failing line, and rerun until it passes.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "owner-interview-post",
+      "relationship": "fed_by",
+      "description": "provides draft needed here"
+    },
+    {
+      "flow_name": "share-captions",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by share-captions"
+    },
+    {
+      "flow_name": "client-expectations",
+      "relationship": "fed_by",
+      "description": "provides draft needed here"
+    },
+    {
+      "flow_name": "news-post-draft",
+      "relationship": "fed_by",
+      "description": "provides draft needed here"
+    },
+    {
+      "flow_name": "newsletter-draft",
+      "relationship": "fed_by",
+      "description": "provides draft needed here"
+    }
+  ]
+}

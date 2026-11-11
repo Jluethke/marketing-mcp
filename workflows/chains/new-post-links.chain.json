@@ -1,0 +1,93 @@
+{
+  "name": "new-post-links",
+  "description": "Plan the internal links for a post that just went live.",
+  "steps": [
+    {
+      "id": "s1_links",
+      "skill_name": "new-post-links",
+      "inputs": {
+        "business_site": "from_user_input",
+        "post_url": "from_user_input"
+      },
+      "outputs": {
+        "link_plan": "link_plan"
+      },
+      "parallel_group": 1
+    }
+  ],
+  "edges": [],
+  "entry_inputs": [
+    "business_site",
+    "post_url"
+  ],
+  "terminal_outputs": [
+    "link_plan"
+  ],
+  "parallel_groups": [
+    [
+      "s1_links"
+    ]
+  ],
+  "estimated_cost": 1,
+  "critical_path": [
+    "s1_links"
+  ],
+  "chain_links": {
+    "prerequisites": [],
+    "next_chains": [],
+    "related_chains": [
+      {
+        "chain_name": "site-diagnosis",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "full-seo-review",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "keyword-plan",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-rollup",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "connect-what-i-have",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "growth-blueprint",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "weekly-seo-loop",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-timeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "prospect-pipeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "ai-visibility-baseline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "content-coverage-map",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "news-anchored-post",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "newsletter-rollup",
+        "relationship": "complement"
+      }
+    ]
+  }
+}

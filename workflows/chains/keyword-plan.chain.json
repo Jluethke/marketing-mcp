@@ -1,0 +1,117 @@
+{
+  "name": "keyword-plan",
+  "description": "Research seed keywords, cluster and trend them, and write the plan with the paid or organic split.",
+  "steps": [
+    {
+      "id": "s1_research",
+      "skill_name": "keyword-research-pass",
+      "inputs": {
+        "seed_keywords": "from_user_input",
+        "locations": "from_user_input_optional"
+      },
+      "outputs": {
+        "keyword_data": "keyword_data"
+      },
+      "parallel_group": 1
+    },
+    {
+      "id": "s2_plan",
+      "skill_name": "keyword-plan-writeup",
+      "inputs": {
+        "keyword_data": "s1_research.keyword_data"
+      },
+      "outputs": {
+        "keyword_plan": "keyword_plan"
+      },
+      "parallel_group": 2
+    }
+  ],
+  "edges": [
+    {
+      "from_step": "s1_research",
+      "to_step": "s2_plan",
+      "data_type": "keyword-research-pass",
+      "field_mapping": {
+        "keyword_data": "keyword_data"
+      }
+    }
+  ],
+  "entry_inputs": [
+    "seed_keywords",
+    "locations"
+  ],
+  "terminal_outputs": [
+    "keyword_plan"
+  ],
+  "parallel_groups": [
+    [
+      "s1_research"
+    ],
+    [
+      "s2_plan"
+    ]
+  ],
+  "estimated_cost": 2,
+  "critical_path": [
+    "s1_research",
+    "s2_plan"
+  ],
+  "chain_links": {
+    "prerequisites": [],
+    "next_chains": [],
+    "related_chains": [
+      {
+        "chain_name": "site-diagnosis",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "full-seo-review",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-rollup",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "connect-what-i-have",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "growth-blueprint",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "weekly-seo-loop",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "new-post-links",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-timeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "prospect-pipeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "ai-visibility-baseline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "content-coverage-map",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "news-anchored-post",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "newsletter-rollup",
+        "relationship": "complement"
+      }
+    ]
+  }
+}

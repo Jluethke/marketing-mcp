@@ -1,0 +1,119 @@
+{
+  "name": "client-timeline",
+  "description": "Write the SEO expectations note a client signs, sourced and gated for plain language.",
+  "steps": [
+    {
+      "id": "s1_note",
+      "skill_name": "client-expectations",
+      "inputs": {
+        "service": "from_user_input"
+      },
+      "outputs": {
+        "expectations_note": "expectations_note"
+      },
+      "parallel_group": 1
+    },
+    {
+      "id": "s2_gate",
+      "skill_name": "copy-gate",
+      "inputs": {
+        "draft": "s1_note.expectations_note",
+        "house_rules": "from_user_input_optional"
+      },
+      "outputs": {
+        "gated_draft": "gated_draft",
+        "copy_report": "copy_report"
+      },
+      "parallel_group": 2
+    }
+  ],
+  "edges": [
+    {
+      "from_step": "s1_note",
+      "to_step": "s2_gate",
+      "data_type": "client-expectations",
+      "field_mapping": {
+        "draft": "expectations_note"
+      }
+    }
+  ],
+  "entry_inputs": [
+    "service",
+    "house_rules"
+  ],
+  "terminal_outputs": [
+    "gated_draft",
+    "copy_report"
+  ],
+  "parallel_groups": [
+    [
+      "s1_note"
+    ],
+    [
+      "s2_gate"
+    ]
+  ],
+  "estimated_cost": 2,
+  "critical_path": [
+    "s1_note",
+    "s2_gate"
+  ],
+  "chain_links": {
+    "prerequisites": [],
+    "next_chains": [],
+    "related_chains": [
+      {
+        "chain_name": "site-diagnosis",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "full-seo-review",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "keyword-plan",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "client-rollup",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "connect-what-i-have",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "growth-blueprint",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "weekly-seo-loop",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "new-post-links",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "prospect-pipeline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "ai-visibility-baseline",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "content-coverage-map",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "news-anchored-post",
+        "relationship": "complement"
+      },
+      {
+        "chain_name": "newsletter-rollup",
+        "relationship": "complement"
+      }
+    ]
+  }
+}

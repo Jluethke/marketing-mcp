@@ -1,0 +1,39 @@
+{
+  "name": "site-pages",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "content",
+    "newsletter"
+  ],
+  "inputs": [
+    "business_site"
+  ],
+  "outputs": [
+    "site_pages"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Read every page of a site with its title and description, grouped by section.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "newsletter-draft",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by newsletter-draft"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "assistants_index",
+      "as": "index",
+      "args": {
+        "url": "$business_site"
+      }
+    }
+  ],
+  "output_map": {
+    "site_pages": "$index"
+  }
+}

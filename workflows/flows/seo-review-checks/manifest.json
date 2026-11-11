@@ -1,0 +1,73 @@
+{
+  "name": "seo-review-checks",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "audit"
+  ],
+  "inputs": [
+    "url"
+  ],
+  "outputs": [
+    "review_findings"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Score a page and read its on-page audit, technical health, readability and broken links.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "seo-fix-list",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by seo-fix-list"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "seo_score",
+      "as": "score",
+      "args": {
+        "url": "$url"
+      }
+    },
+    {
+      "tool": "seo_audit",
+      "as": "audit",
+      "args": {
+        "url": "$url"
+      }
+    },
+    {
+      "tool": "http_check",
+      "as": "http",
+      "args": {
+        "url": "$url"
+      }
+    },
+    {
+      "tool": "content_analysis",
+      "as": "content",
+      "args": {
+        "url": "$url"
+      }
+    },
+    {
+      "tool": "check_links",
+      "as": "links",
+      "args": {
+        "url": "$url"
+      }
+    }
+  ],
+  "output_map": {
+    "review_findings": {
+      "score": "$score",
+      "audit": "$audit",
+      "http": "$http",
+      "content": "$content",
+      "links": "$links"
+    }
+  }
+}

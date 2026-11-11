@@ -1,0 +1,27 @@
+{
+  "name": "money-page-decision",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "planning"
+  ],
+  "inputs": [
+    "money_page_evidence"
+  ],
+  "outputs": [
+    "money_page_actions"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "From the money page evidence, choose one page to build or fix this week and list its changes.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "money-page-evidence",
+      "relationship": "fed_by",
+      "description": "provides money_page_evidence needed here"
+    }
+  ]
+}

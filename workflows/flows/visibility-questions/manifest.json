@@ -1,0 +1,45 @@
+{
+  "name": "visibility-questions",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "ai-search",
+    "measurement"
+  ],
+  "inputs": [
+    "business_name",
+    "service",
+    "city",
+    "competitors"
+  ],
+  "outputs": [
+    "question_set"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Generate a fixed set of buyer questions for a business so the same set can be asked every month.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "visibility-ask",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by visibility-ask"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "visibility_questions",
+      "as": "qs",
+      "args": {
+        "business": "$business_name",
+        "service": "$service",
+        "city": "$city",
+        "competitors": "$competitors"
+      }
+    }
+  ],
+  "output_map": {
+    "question_set": "$qs"
+  }
+}

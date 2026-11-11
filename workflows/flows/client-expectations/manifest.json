@@ -1,0 +1,27 @@
+{
+  "name": "client-expectations",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "client-management",
+    "seo"
+  ],
+  "inputs": [
+    "service"
+  ],
+  "outputs": [
+    "expectations_note"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Write a one-page note that sets SEO timing and success measures at signing, with every figure sourced and dated.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "copy-gate",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by copy-gate"
+    }
+  ]
+}

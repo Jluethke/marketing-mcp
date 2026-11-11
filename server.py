@@ -53,6 +53,25 @@ keyword research:
     growth_teardown             dated timeline of a company's growth moves, read from
                                 archived copies of its homepage
 
+  LOCAL SEO (no auth; logic in seo_rules.py)
+    money_page_check / competitor_page_gap / missing_pages / crawl_depth
+    internal_link_plan / paid_vs_organic / image_check
+
+  PROSPECTING (no auth; logic in prospecting.py)
+    find_businesses / prospect_finding / call_sheet / agency_score
+
+  EMAIL AND COPY (no auth; nothing is sent; logic in email_checks.py, copy_check.py)
+    email_auth_check / verify_email / dmarc_report / classify_replies / send_window / copy_check
+
+  SITE HYGIENE (no auth; logic in site_hygiene.py)
+    duplicate_audit / sitemap_hygiene / schema_build / assistants_index / cover_image / strip_metadata
+
+  AI VISIBILITY (logic in ai_visibility.py; ask_assistant in ai_ask.py needs ANTHROPIC_API_KEY)
+    visibility_questions / ask_assistant / visibility_record / visibility_report
+
+  WORKFLOWS (skill chains under workflows/; engine in workflows.py)
+    list_workflows / run_workflow / continue_workflow, and one prompt per workflow
+
 Auth'd tools return a clear setup error until their credentials are configured;
 the no-auth tools run with no setup. Run: python server.py  (stdio transport).
 """
@@ -66,7 +85,16 @@ from collections import Counter, defaultdict
 
 from mcp.server.fastmcp import FastMCP
 
+import ai_ask
+import ai_visibility as _visibility
+import copy_check as _copy
+import email_checks as _email
 import growth
+import prospecting as _prospecting
+import seo_rules
+import site_hygiene as _hygiene
+import sitefetch
+import workflows
 
 # Auto-load a .env placed next to this server, so credentials need no manual
 # wiring into the MCP config. No-op if python-dotenv or the file is absent.
@@ -83,7 +111,7 @@ mcp = FastMCP("marketing-mcp")
 _GEO = {"US": "2840", "CA": "2124", "GB": "2826", "UK": "2826", "AU": "2036",
         "IN": "2356", "DE": "2276", "FR": "2250", "ES": "2724", "IE": "2372"}
 _LANG = {"en": "1000", "es": "1003", "fr": "1002", "de": "1001", "pt": "1014", "it": "1004"}
-_UA = "Mozilla/5.0 (compatible; marketing-mcp/1.0; +https://wayfindersystemsgroup.com)"
+_UA = sitefetch.UA
 
 
 def _geo_res(geo: str) -> str:
@@ -740,66 +768,16 @@ def seo_audit(url: str) -> dict:
 def _fetch_soup(url: str):
     """Fetch a URL and parse the HTML. Returns (response, soup). Raises ImportError
     if beautifulsoup4 is missing, or a network error, so callers surface a clean
-    message. Shared by the on-page tools below."""
-    import httpx
-    from bs4 import BeautifulSoup
-    r = httpx.get(url, timeout=20.0, follow_redirects=True,
-                  headers={"User-Agent": _UA})
-    return r, BeautifulSoup(r.text, "html.parser")
+    message. Shared by the on-page tools below; the fetch lives in sitefetch."""
+    return sitefetch.fetch_soup(url, ua=_UA)
 
 
-# Status codes that mean "we were turned away at the door", not "this page is
-# bad". A WAF answering 403 or 429 serves a challenge page whose markup has no
-# title, no h1, no description and about nine words on it, so auditing that
-# response scores the wall and reports it as the customer's site. Verified
-# 2026-09-09 against two sites behind Cloudflare that return 200 in a browser:
-# seo_score called both of them a 73/C and listed seven specific defects, every
-# one of which described the block page.
-_WALL_CODES = {401, 403, 406, 409, 418, 429, 503}
-
-
-def _unreadable(r) -> dict | None:
-    """None when the response is a page we may audit, else why we may not.
-
-    Anything outside 2xx is refused rather than audited. A 404 or a 500 is a
-    real finding about that URL and is reported as one, but it is not a page
-    whose title and word count mean anything, and a caller who reads those
-    numbers out to the site's owner is wrong in front of them.
-    """
-    code = getattr(r, "status_code", None)
-    if code is None:
-        return {"error": "no HTTP response", "readable": False}
-    if 200 <= code < 300:
-        return None
-    final = str(getattr(r, "url", "") or "")
-    server_hdr = ""
-    try:
-        server_hdr = (r.headers.get("server") or "").lower()
-    except Exception:  # noqa: BLE001
-        pass
-    if code in _WALL_CODES:
-        who = server_hdr or "the site's firewall"
-        return {
-            "status_code": code, "url": final, "readable": False,
-            "blocked": True,
-            "error": (f"blocked before the page could be read (HTTP {code} from "
-                      f"{who}). This is a bot wall, not a defect in the site, and "
-                      "the site may well load normally in a browser. No audit was "
-                      "run and no score is reported, because scoring the block "
-                      "page would describe the wall rather than the site."),
-        }
-    if code == 404:
-        return {"status_code": code, "url": final, "readable": False,
-                "blocked": False,
-                "error": "that URL returns 404. The page does not exist, so there "
-                         "is nothing on it to audit."}
-    if code >= 500:
-        return {"status_code": code, "url": final, "readable": False,
-                "blocked": False,
-                "error": f"the server returned HTTP {code}. The site is erroring, "
-                         "so there is no page to audit."}
-    return {"status_code": code, "url": final, "readable": False, "blocked": False,
-            "error": f"HTTP {code}, which is not a readable page."}
+# A bot wall, a 404 or a 5xx is reported, never audited. Verified 2026-09-09
+# against two sites behind Cloudflare that return 200 in a browser: seo_score
+# called both of them a 73/C and listed seven defects, every one of which
+# described the block page. The rule lives in sitefetch so every module shares it.
+_WALL_CODES = sitefetch.WALL_CODES
+_unreadable = sitefetch.unreadable
 
 
 def _page_audit(r, soup) -> dict:
@@ -1159,85 +1137,20 @@ def validate_schema(url: str) -> dict:
 
 
 def _site_root(url: str) -> str:
-    from urllib.parse import urlparse
-    p = urlparse(url if "://" in url else "https://" + url)
-    return "%s://%s" % (p.scheme or "https", p.netloc)
+    return sitefetch.site_root(url)
 
 
 def _parse_robots(root: str):
-    """Return (rules, sitemaps) for a site root. rules has disallow/allow path lists
-    for the * user-agent; sitemaps is the list of declared Sitemap: URLs."""
-    import httpx
-    sitemaps, disallow, allow = [], [], []
-    try:
-        r = httpx.get(root + "/robots.txt", timeout=15.0, follow_redirects=True,
-                      headers={"User-Agent": _UA})
-        if r.status_code < 400:
-            agent_star = False
-            for line in r.text.splitlines():
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                low = line.lower()
-                if low.startswith("sitemap:"):
-                    sitemaps.append(line.split(":", 1)[1].strip())
-                elif low.startswith("user-agent:"):
-                    agent_star = line.split(":", 1)[1].strip() == "*"
-                elif agent_star and low.startswith("disallow:"):
-                    disallow.append(line.split(":", 1)[1].strip())
-                elif agent_star and low.startswith("allow:"):
-                    allow.append(line.split(":", 1)[1].strip())
-    except Exception:  # noqa: BLE001
-        pass
-    return {"disallow": disallow, "allow": allow}, sitemaps
+    """Return (rules, sitemaps) for a site root (see sitefetch.parse_robots)."""
+    return sitefetch.parse_robots(root, ua=_UA)
 
 
-def _parse_sitemap(xml_text):
-    """Return (child_sitemaps, page_urls) from a sitemap body. A <sitemapindex>
-    yields child sitemaps; a <urlset> yields page URLs."""
-    import xml.etree.ElementTree as ET
-    locs = []
-    try:
-        root = ET.fromstring(xml_text.encode("utf-8") if isinstance(xml_text, str) else xml_text)
-    except Exception:  # noqa: BLE001
-        return [], []
-    for el in root.iter():
-        if el.tag.rsplit("}", 1)[-1] == "loc" and el.text:
-            locs.append(el.text.strip())
-    if root.tag.rsplit("}", 1)[-1] == "sitemapindex":
-        return locs, []
-    return [], locs
+_parse_sitemap = sitefetch.parse_sitemap
 
 
 def _collect_sitemap_urls(root: str, declared_sitemaps, limit: int = 200):
-    """Discover up to `limit` page URLs for a site from its sitemap(s), following
-    one level of sitemap-index nesting. Returns (urls, info)."""
-    import httpx
-    queue = list(declared_sitemaps) or [root + "/sitemap.xml"]
-    seen_sm, pages = set(), []
-    info = {"sitemaps_read": [], "is_index": False}
-    while queue and len(pages) < limit:
-        sm = queue.pop(0)
-        if sm in seen_sm:
-            continue
-        seen_sm.add(sm)
-        try:
-            r = httpx.get(sm, timeout=20.0, follow_redirects=True,
-                          headers={"User-Agent": _UA})
-            if r.status_code >= 400:
-                continue
-        except Exception:  # noqa: BLE001
-            continue
-        children, urls = _parse_sitemap(r.text)
-        info["sitemaps_read"].append(sm)
-        if children:
-            info["is_index"] = True
-            queue.extend(c for c in children if c not in seen_sm)
-        for u in urls:
-            if len(pages) >= limit:
-                break
-            pages.append(u)
-    return pages, info
+    """Discover up to `limit` page URLs from a site's sitemap(s); returns (urls, info)."""
+    return sitefetch.sitemap_urls(root, declared_sitemaps, limit=limit, ua=_UA)
 
 
 @mcp.tool()
@@ -2356,6 +2269,19 @@ def set_pagespeed_key(api_key: str) -> dict:
     return {"saved": True, "key": _mask(api_key)}
 
 
+@mcp.tool()
+def set_anthropic_key(api_key: str) -> dict:
+    """Save an Anthropic API key from chat, for asking buyer questions in clean sessions.
+    Use to set up ask_assistant and the AI visibility workflow.
+
+    Returns: saved, key.
+    Setup: no setup.
+    Example: `set_anthropic_key(api_key=...)`.
+    """
+    _write_env({"ANTHROPIC_API_KEY": api_key})
+    return {"saved": True, "key": _mask(api_key)}
+
+
 # ==== setup / health check ================================================
 
 def _has_module(mod: str) -> bool:
@@ -2416,6 +2342,28 @@ def _platform_status(live: bool = False) -> dict:
                                  "seo_score"],
                        "next_step": None if bs4_ok else "pip install beautifulsoup4"},
         "google_ads": ga, "meta_ads": meta, "ga4": ga4, "search_console": gsc,
+        "local_seo": {"ready": bs4_ok,
+                      "tools": ["money_page_check", "competitor_page_gap", "missing_pages", "crawl_depth",
+                                "internal_link_plan", "paid_vs_organic", "image_check"]},
+        "site_hygiene": {"ready": bs4_ok and _has_module("PIL"),
+                         "tools": ["duplicate_audit", "sitemap_hygiene", "schema_build", "assistants_index",
+                                   "cover_image", "strip_metadata"],
+                         "next_step": None if _has_module("PIL") else "pip install pillow (cover_image)"},
+        "prospecting": {"ready": bs4_ok,
+                        "tools": ["find_businesses", "prospect_finding", "call_sheet", "agency_score"]},
+        "email_and_copy": {"ready": True,
+                           "tools": ["email_auth_check", "verify_email", "dmarc_report", "classify_replies",
+                                     "send_window", "copy_check"]},
+        "ai_visibility": {"ready": _has_module("anthropic") and bool(os.environ.get("ANTHROPIC_API_KEY")
+                                                                    or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
+                          "tools": ["visibility_questions", "ask_assistant", "visibility_record",
+                                    "visibility_report"],
+                          "next_step": ("pip install anthropic" if not _has_module("anthropic")
+                                        else None if (os.environ.get("ANTHROPIC_API_KEY")
+                                                      or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+                                        else "save an Anthropic API key with set_anthropic_key")},
+        "workflows": {"ready": True, "count": len(workflows.list_chain_names()),
+                      "tools": ["list_workflows", "run_workflow", "continue_workflow"]},
     }
     if live:
         if ga["ready"]:
@@ -2494,86 +2442,471 @@ def growth_teardown(domain: str, years: int = 3, max_snapshots: int = 10, time_b
 
 
 # ---------------------------------------------------------------------------
-# Standardized workflow prompts. The common multi-tool sequences as one entry
-# point each, so a user invokes the workflow by name instead of remembering the
-# tool order. Each returns a plan that names the real tools to run.
+# Local SEO rules: the checks a local-business SEO operator runs every week.
+# Logic in seo_rules.py; every page read goes through sitefetch, so a bot wall,
+# a 404 or a 5xx is reported and never scored.
 # ---------------------------------------------------------------------------
 
-@mcp.prompt()
-def full_seo_review(url: str) -> str:
-    """Full SEO review of one URL using the no-setup tools, then a ranked fix list."""
-    return (
-        "Run a full SEO review of " + url + " with these tools in order, then summarize:\n"
-        "1. seo_score for " + url + " (headline 0-100 score and grade).\n"
-        "2. seo_audit for " + url + " (title, meta, headings, alt text, on-page issues).\n"
-        "3. http_check for " + url + " (HTTPS, redirect chain, security headers, response time).\n"
-        "4. content_analysis for " + url + " (readability, keyword density, heading outline).\n"
-        "5. check_links for " + url + " (broken 4xx/5xx links).\n"
-        "Then give the top five fixes ordered by impact, each tied to the finding that supports it. "
-        "All five tools need no setup."
-    )
+@mcp.tool()
+def money_page_check(url: str, keyword: str) -> dict:
+    """Check that a money page uses its target keyword where it counts: visible body text, title, H1, URL slug, first 100 words, meta description.
+    Use to find the most common reason a service page does not rank: the keyword never appears in the text a reader sees.
+
+    Returns: url, keyword, word_count, occurrences_in_visible_text, elements, all_elements_pass, fixes.
+    Setup: no setup.
+    Example: `money_page_check(url='https://example.com/water-heaters', keyword='water heater repair hoboken')`.
+    """
+    return seo_rules.money_page_check(url, keyword)
 
 
-@mcp.prompt()
-def keyword_plan(seed_keywords: str, locations: str = "") -> str:
-    """Keyword plan from seed terms: research, cluster into themes, add trend direction."""
-    loc = (" for locations: " + locations) if locations else ""
-    return (
-        "Build a keyword plan from these seeds: " + seed_keywords + loc + ".\n"
-        "1. keyword_research with seed_keywords=" + seed_keywords + " (ideas + volume + intent, ranked).\n"
-        "2. cluster_keywords on the returned terms (group into themes by shared token).\n"
-        "3. trend_index on the top theme heads (rising vs falling interest).\n"
-        "Output a short plan: the theme clusters, the highest priority (volume x intent) terms per cluster, "
-        "and which themes are trending up. keyword_research needs Google Ads (run connect_google_ads); "
-        "cluster_keywords and trend_index need no setup."
-    )
+@mcp.tool()
+def competitor_page_gap(url: str, competitor_urls: list[str], keyword: str) -> dict:
+    """Compare a page with up to three competitor pages: title, meta, H1, H2s, word count, keyword placement, schema types and trust facts.
+    Use to see what every competitor says that your page does not, and whether your page over-uses the keyword.
+
+    Returns: keyword, your_page, competitors, unreadable_competitors, table, over_optimization, word_count_gap_vs_median, missing_from_you.
+    Setup: no setup.
+    Example: `competitor_page_gap(url='https://example.com/roofing', competitor_urls=['https://a.example/roofing'], keyword='roof repair austin')`.
+    """
+    return seo_rules.competitor_page_gap(url, competitor_urls, keyword)
 
 
-@mcp.prompt()
-def client_rollup() -> str:
-    """Cross-platform KPI rollup across every configured client."""
-    return (
-        "Give a portfolio rollup across all configured clients.\n"
-        "1. clients_overview (per-client KPIs across Ads, Meta, GA4, Search Console, plus a combined total).\n"
-        "Then summarize: which clients are up or down week over week, any platform returning 'needs setup', "
-        "and the one action per client that matters most. Uses whatever platforms are connected "
-        "(run setup_check first if unsure)."
-    )
+@mcp.tool()
+def missing_pages(site: str, competitor_sites: list[str], max_pages: int = 200) -> dict:
+    """List the page topics competitors have and your site lacks, ranked by how many competitors have each.
+    Use to find the service pages to build next.
+
+    Returns: site, your_topics, your_topic_count, per_site, missing_topics.
+    Setup: no setup (reads sitemaps, else the homepage navigation).
+    Example: `missing_pages(site='https://example.com', competitor_sites=['https://a.example', 'https://b.example'])`.
+    """
+    return seo_rules.missing_pages(site, competitor_sites, max_pages=max_pages)
 
 
-@mcp.prompt()
-def connect_what_i_have() -> str:
-    """Find out what is connected and walk through connecting the rest, from chat."""
-    return (
-        "Help me connect the marketing platforms from chat, no terminal.\n"
-        "1. setup_check to report which platforms are ready and which are not.\n"
-        "2. For each one not ready, walk me through the matching connect tool: connect_google_ads for "
-        "Google Ads, connect_meta for Meta, connect_analytics for GA4 and Search Console, "
-        "set_pagespeed_key for the PageSpeed quota.\n"
-        "Ask me only for the one credential each step needs, in plain language."
-    )
+@mcp.tool()
+def crawl_depth(start_url: str, max_pages: int = 150, time_budget_s: int = 90) -> dict:
+    """Measure how many clicks each page sits from the homepage, and find sitemap pages no link reaches.
+    Use to find money pages buried too deep for people or crawlers to find (more than two clicks).
+
+    Returns: site, pages_crawled, max_depth, depths, deeper_than_2, orphan_sitemap_urls, blog_only_pages, skipped.
+    Setup: no setup.
+    Example: `crawl_depth(start_url='https://example.com')`.
+    """
+    return seo_rules.crawl_depth(start_url, max_pages=max_pages, time_budget_s=time_budget_s)
 
 
-@mcp.prompt()
-def growth_blueprint(company: str, domain: str = "") -> str:
-    """Reverse-engineer a company's growth: a dated timeline by lane, every row tied to its source."""
-    dom = domain or ("the primary domain of " + company)
-    return (
-        "Reverse-engineer how " + company + " grew. Use these tools in order:\n"
-        "1. growth_teardown with domain=" + dom + " (dated first-seen brackets for ad pixels, affiliate "
-        "programs, analytics tools, social channels and site sections, plus new URLs per quarter).\n"
-        "2. growth_signals for the same site (the stack running today, including tags inside the tag manager, "
-        "llms.txt, and what robots.txt tells each AI crawler).\n"
-        "3. trend_index with keywords=[" + company + "] and timeframe='today 5-y' (when brand search interest moved).\n"
-        "4. meta_ad_library with search_terms=" + company + " (live ad creative; skip this step if Meta is not connected).\n"
-        "5. A web search for funding rounds and launch dates, one source link per date.\n"
-        "Then lay out one timeline with these lanes: Ads and tracking, Social media, Search and SEO, "
-        "AI search (AEO), Affiliates and referral, Fundraising. Each row carries its date or date bracket and "
-        "the tool or link it came from. Where a tool lists something under not_covered or skipped, write "
-        "'no public signal' in that cell and leave it empty of estimates. Close with the three moves that "
-        "preceded the steepest growth in new URLs or brand interest, and which of them a small team can copy. "
-        "Steps 1 to 3 need no setup."
-    )
+@mcp.tool()
+def internal_link_plan(site: str, new_post_url: str, topic: str | None = None, max_pages: int = 150) -> dict:
+    """Plan the internal links for a new post: 3 to 5 posts and 1 money page to link from it, and 3 older posts to link to it, each with its anchor sentence.
+    Use after publishing a post, so it gets found and passes strength to the money page.
+
+    Returns: site, new_post_url, topic, link_from, money_page_to_link_to, older_posts_to_link_to_new, already_linking_to_new_post, pages_scored.
+    Setup: no setup.
+    Example: `internal_link_plan(site='https://example.com', new_post_url='https://example.com/blog/how-long-do-water-heaters-last')`.
+    """
+    return seo_rules.internal_link_plan(site, new_post_url, topic=topic, max_pages=max_pages)
+
+
+@mcp.tool()
+def paid_vs_organic(rows: list[dict], cpc_threshold: float | None = None, difficulty_threshold: float = 30) -> dict:
+    """Split keywords between paid search and SEO by click cost and ranking difficulty: SEO first, ads now with SEO long-term, ads for speed, or ads only.
+    Use on keyword_research rows (add a difficulty column from any keyword tool) to decide where each keyword goes.
+
+    Returns: cpc_threshold, difficulty_threshold, counts, boxes, unclassified_needs_difficulty.
+    Setup: no setup (difficulty is never invented; rows without it are listed separately).
+    Example: `paid_vs_organic(rows=[{'keyword': 'roof repair austin', 'cpc': 18.5, 'difficulty': 22}])`.
+    """
+    return seo_rules.paid_vs_organic(rows, cpc_threshold=cpc_threshold,
+                                     difficulty_threshold=difficulty_threshold)
+
+
+@mcp.tool()
+def image_check(url: str) -> dict:
+    """Check every image on a page: descriptive file name, alt text, modern format, lazy loading, width and height set, and images per 250 words.
+    Use to fix image SEO and layout shift on one page.
+
+    Returns: url, image_count, word_count, images_per_250_words, images, fixes.
+    Setup: no setup.
+    Example: `image_check(url='https://example.com/blog/post')`.
+    """
+    return seo_rules.image_check(url)
+
+
+# ---------------------------------------------------------------------------
+# Prospecting: local businesses from open map data, one graded finding per
+# site, and a call sheet whose openers claim only what the audit found.
+# Logic in prospecting.py.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def find_businesses(area: str, category: str | None = None, limit: int = 200,
+                    require_website: bool = True, include_chains: bool = False) -> dict:
+    """Pull independent local businesses in an area from OpenStreetMap, by category, with website and phone where listed and chains dropped.
+    Use to build a prospect list without a paid data source (commercial directories refuse automated reads).
+
+    Returns: area, category, found, with_website, with_phone, count, businesses, attribution, note.
+    Setup: no setup (OpenStreetMap; one request at a time).
+    Example: `find_businesses(area='Hoboken, New Jersey', category='bakery')`.
+    """
+    return _prospecting.find_businesses(area, category=category, limit=limit,
+                                        require_website=require_website, include_chains=include_chains)
+
+
+@mcp.tool()
+def prospect_finding(url: str, keyword: str | None = None) -> dict:
+    """Audit one business website and return its single strongest finding, graded A, B or C, with the evidence it rests on.
+    Use to open a sales conversation with something true about the prospect's own site; a clean site returns no finding.
+
+    Returns: url, readable, grade, finding, evidence, ranking_factor, clean, all_findings, measured.
+    Setup: no setup.
+    Example: `prospect_finding(url='https://example.com')`.
+    """
+    return _prospecting.prospect_finding(url, keyword=keyword)
+
+
+@mcp.tool()
+def call_sheet(prospects: list[dict], your_offer: str, your_name: str = "", format: str = "rows",
+               max_audits: int = 25, time_budget_s: int = 120) -> dict:
+    """Turn prospects into a call sheet: one graded finding per site and a two-sentence opener built only from that finding and your offer.
+    Use after find_businesses to get a list of calls where no opener claims something nobody checked.
+
+    Returns: callable, no_phone, unreadable, clean, voice_agent, counts, csv (when format='csv').
+    Setup: no setup.
+    Example: `call_sheet(prospects=[...], your_offer='We fix local search for bakeries in a month.')`.
+    """
+    return _prospecting.call_sheet(prospects, your_offer, your_name=your_name, format=format,
+                                   max_audits=max_audits, time_budget_s=time_budget_s)
+
+
+@mcp.tool()
+def agency_score(url: str) -> dict:
+    """Score a marketing or web agency's site as a reseller partner: what it sells, who it serves, and what to ask on the call.
+    Use to rank agencies that could resell or refer your service.
+
+    Returns: url, readable, score, tier, tier_meaning, factors, evidence, disqualifiers, ask_on_the_call.
+    Setup: no setup.
+    Example: `agency_score(url='https://example-agency.com')`.
+    """
+    return _prospecting.agency_score(url)
+
+
+# ---------------------------------------------------------------------------
+# Email checks. The server never sends mail (Claude's mail connectors do);
+# these tools check a domain, an address, replies and send times.
+# Logic in email_checks.py.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def email_auth_check(domain: str, dkim_selectors: list[str] | None = None) -> dict:
+    """Check a sending domain's SPF, DKIM, DMARC and MX records and list the fixes.
+    Use before any outreach: corporate filters routinely reject unsigned mail as spam.
+
+    Returns: domain, spf, dmarc, dkim, mx, fixes, summary.
+    Setup: no setup.
+    Example: `email_auth_check(domain='example.com')`.
+    """
+    return _email.email_auth_check(domain, dkim_selectors=dkim_selectors)
+
+
+@mcp.tool()
+def verify_email(address: str, smtp_probe: bool = False) -> dict:
+    """Check an email address before sending: syntax, mail server, role or free or disposable address, and optionally an SMTP probe that never sends.
+    Use to cut bounces from guessed addresses (they bounce at about a quarter in practice).
+
+    Returns: address, valid_syntax, domain, role_address, free_mail, disposable, mx_present, deliverable, smtp_probe.
+    Setup: no setup (the probe needs outbound port 25, which many networks block; then the result is unknown).
+    Example: `verify_email(address='jane@example.com', smtp_probe=True)`.
+    """
+    return _email.verify_email(address, smtp_probe=smtp_probe)
+
+
+@mcp.tool()
+def dmarc_report(xml_text_or_path: str) -> dict:
+    """Read a DMARC aggregate report (XML text, or a path to an .xml, .gz or .zip file) into sources, results and the share passing.
+    Use to see who sends mail as your domain and whether it passes.
+
+    Returns: org, report_id, date_range, policy, rows, totals, pass_rate.
+    Setup: no setup.
+    Example: `dmarc_report(xml_text_or_path='C:/reports/google.com!example.com!1700000000!1700086400.xml.gz')`.
+    """
+    return _email.dmarc_report(xml_text_or_path)
+
+
+@mcp.tool()
+def classify_replies(messages: list[dict]) -> dict:
+    """Sort outreach replies: dead address, policy block, mailbox full, out of office (with return date), address change (with the new contact), unsubscribe, other auto-reply, or a human reply.
+    Use on replies pulled from a mail connector to clean a list and find the people to follow up.
+
+    Returns: count, counts, messages (index, label, evidence, fields).
+    Setup: no setup.
+    Example: `classify_replies(messages=[{'subject': 'Out of office', 'body': 'Back on Monday', 'from': 'a@example.com'}])`.
+    """
+    return _email.classify_replies(messages)
+
+
+@mcp.tool()
+def send_window(recipients: list[dict], local_hour: int = 10, weekdays: list[str] | None = None,
+                start_date: str | None = None, batch_size: int = 50) -> dict:
+    """Schedule each recipient's send for their own local mid-morning on an allowed weekday, grouped into batches by send time.
+    Use to time outreach across time zones.
+
+    Returns: local_hour, weekdays, assigned_count, unassigned, batch_count, batches.
+    Setup: no setup.
+    Example: `send_window(recipients=[{'email': 'a@example.com', 'timezone': 'America/Chicago'}])`.
+    """
+    return _email.send_window(recipients, local_hour=local_hour,
+                              weekdays=tuple(weekdays) if weekdays else ("Tue", "Wed", "Thu"),
+                              start_date=start_date, batch_size=batch_size)
+
+
+@mcp.tool()
+def copy_check(text: str, banned_words: list[str] | None = None, extra_rules: list[dict] | None = None,
+               check_claims: bool = True, locale: str = "en-US") -> dict:
+    """Check copy for AI tells, hype words, hedges, overlong sentences, spelling locale, and numbers or superlatives without a source.
+    Use on any draft before it goes out: posts, emails, pages, captions.
+
+    Returns: locale, issue_count, counts, issues (line, column, match, rule, suggestion), pass.
+    Setup: no setup.
+    Example: `copy_check(text='Our seamless service is the best in town!')`.
+    """
+    return _copy.copy_check(text, banned_words=banned_words, extra_rules=extra_rules,
+                            check_claims=check_claims, locale=locale)
+
+
+# ---------------------------------------------------------------------------
+# Site hygiene and publishing aids. Logic in site_hygiene.py.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def duplicate_audit(start_url: str, max_pages: int = 100, time_budget_s: int = 90) -> dict:
+    """Find pages that compete with each other or are lost: exact and near duplicates, shared titles, H1s and descriptions, slug collisions, orphan pages, broken internal links and redirects owed.
+    Use to clean up a site before adding pages.
+
+    Returns: site, pages_read, exact_duplicates, near_duplicates, shared_titles, shared_h1s, shared_meta_descriptions, slug_collisions, orphan_pages, broken_internal_links, redirects_owed, skipped.
+    Setup: no setup.
+    Example: `duplicate_audit(start_url='https://example.com')`.
+    """
+    return _hygiene.duplicate_audit(start_url, max_pages=max_pages, time_budget_s=time_budget_s)
+
+
+@mcp.tool()
+def sitemap_hygiene(url: str, sample: int = 50, time_budget_s: int = 90) -> dict:
+    """Check robots.txt and the sitemap: declared, valid, lastmod dates real, URLs that are not 200, noindex or canonicalized elsewhere, mixed hosts, and which AI crawlers are allowed.
+    Use to confirm search engines and AI assistants can find and read every page.
+
+    Returns: site, robots_txt_reachable, sitemap_declared, sitemap_valid_xml, url_count, lastmod, hosts, non_200, noindex_in_sitemap, canonicalized_elsewhere, ai_crawlers, issues.
+    Setup: no setup.
+    Example: `sitemap_hygiene(url='https://example.com')`.
+    """
+    return _hygiene.sitemap_hygiene(url, sample=sample, time_budget_s=time_budget_s)
+
+
+@mcp.tool()
+def schema_build(business_type: str, name: str, url: str, phone: str | None = None, address: str | None = None,
+                 city: str | None = None, region: str | None = None, postal_code: str | None = None,
+                 country: str = "US", services: list[str] | None = None, faqs: list[dict] | None = None,
+                 same_as: list[str] | None = None, hours: list[str] | None = None, logo: str | None = None,
+                 founder: str | None = None) -> dict:
+    """Build JSON-LD for a local business: the most specific schema.org business type, the website, one Service per service, an FAQ page and the founder.
+    Use to give a site structured data search engines and AI assistants read; paste the result into a script tag and check it with validate_schema.
+
+    Returns: jsonld, types, node_count, valid_json.
+    Setup: no setup.
+    Example: `schema_build(business_type='plumber', name='Example Plumbing', url='https://example.com', city='Austin', region='TX')`.
+    """
+    return _hygiene.schema_build(business_type, name, url, phone=phone, address=address, city=city, region=region,
+                                 postal_code=postal_code, country=country, services=services, faqs=faqs,
+                                 same_as=same_as, hours=hours, logo=logo, founder=founder)
+
+
+@mcp.tool()
+def assistants_index(url: str, max_pages: int = 200, site_name: str | None = None, summary: str | None = None,
+                     time_budget_s: int = 120) -> dict:
+    """Build an llms.txt index for AI assistants from a site's own pages: one line per page with its title and description, grouped by section.
+    Use to publish the file assistants read to understand a site, or to inventory a site's pages.
+
+    Returns: text, page_count, section_count, skipped, site, seed_mode.
+    Setup: no setup (nothing is written; save the text as /llms.txt).
+    Example: `assistants_index(url='https://example.com')`.
+    """
+    return _hygiene.assistants_index(url, max_pages=max_pages, site_name=site_name, summary=summary,
+                                     time_budget_s=time_budget_s)
+
+
+@mcp.tool()
+def cover_image(title: str, subtitle: str | None = None, out_path: str | None = None, width: int = 1200,
+                height: int = 630, bg: str = "#0B1F3A", fg: str = "#FFFFFF", accent: str = "#C9A227",
+                logo_path: str | None = None, font_path: str | None = None) -> dict:
+    """Render a title card for a post or article as a PNG, with every text box checked inside the area social previews keep.
+    Use for article covers and link previews.
+
+    Returns: path, size, title_font_size, safe_zone, text_boxes, safe_zone_ok.
+    Setup: no setup (Pillow).
+    Example: `cover_image(title='How Long Does a Water Heater Last?')`.
+    """
+    return _hygiene.cover_image(title, subtitle=subtitle, out_path=out_path, width=width, height=height,
+                                bg=bg, fg=fg, accent=accent, logo_path=logo_path, font_path=font_path)
+
+
+@mcp.tool()
+def strip_metadata(path: str, out_path: str | None = None) -> dict:
+    """Remove author, company, template and provenance metadata from a .docx, .xlsx, .pptx, PNG or JPEG before publishing.
+    Use on generated documents and images before they go public.
+
+    Returns: format, out_path, removed.
+    Setup: no setup (writes a .clean copy unless out_path is given).
+    Example: `strip_metadata(path='C:/drafts/report.docx')`.
+    """
+    return _hygiene.strip_metadata(path, out_path=out_path)
+
+
+# ---------------------------------------------------------------------------
+# AI visibility: how often an assistant names the business when buyers ask.
+# Logic in ai_visibility.py; ask_assistant below asks the questions.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def visibility_questions(business: str, service: str, city: str | None = None, competitors: list[str] | None = None,
+                         extra_questions: list[str] | None = None, count: int = 15) -> dict:
+    """Generate a fixed set of buyer questions that measure whether an AI assistant names the business.
+    Use to start an AI visibility baseline; keep the same set every month so runs compare.
+
+    Returns: business, service, city, count, questions, competitors, instructions.
+    Setup: no setup.
+    Example: `visibility_questions(business='Example Plumbing', service='water heater installation', city='Austin')`.
+    """
+    return _visibility.visibility_questions(business, service, city=city, competitors=competitors,
+                                            extra_questions=extra_questions, count=count)
+
+
+@mcp.tool()
+def visibility_record(business: str, answers: list[dict], assistant: str = "claude", run_date: str | None = None,
+                      competitors: list[str] | None = None, aliases: list[str] | None = None) -> dict:
+    """Record one AI visibility run: for each answer, whether the business was named, its position, and the competitors named.
+    Use on the answers from ask_assistant (or answers pasted from any assistant).
+
+    Returns: business, assistant, run_date, asked, named, share_of_answer, avg_position_when_named, competitor_share, never_named_questions.
+    Setup: no setup (runs are kept in a local file).
+    Example: `visibility_record(business='Example Plumbing', answers=[{'question': '...', 'answer': '...'}])`.
+    """
+    return _visibility.visibility_record(business, answers, assistant=assistant, run_date=run_date,
+                                         competitors=competitors, aliases=aliases)
+
+
+@mcp.tool()
+def visibility_report(business: str, assistant: str | None = None) -> dict:
+    """Report AI visibility over time for a business: share of answer per run, change since the first run, and the questions it is never named in.
+    Use monthly to see whether content work is moving AI answers.
+
+    Returns: business, runs, over_time, share_of_answer_first, share_of_answer_latest, share_change_since_first, never_named_questions.
+    Setup: no setup.
+    Example: `visibility_report(business='Example Plumbing')`.
+    """
+    return _visibility.visibility_report(business, assistant=assistant)
+
+
+# ---------------------------------------------------------------------------
+# Ask Claude buyer questions in clean sessions (AI visibility measurement).
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def ask_assistant(questions: list, model: str | None = None) -> dict:
+    """Ask Claude each buyer question in its own fresh API session with web search on, and return each answer with the links it cited.
+    Use to measure AI visibility without the current chat's context leaking into the answers (feed the result to visibility_record).
+
+    Returns: answers, asked, failed, model, method.
+    Setup: needs an Anthropic API key (run set_anthropic_key).
+    Example: `ask_assistant(questions=['Who is the best roofer in Austin?'])`.
+    """
+    return ai_ask.ask_all(questions, model=model)
+
+
+# ---------------------------------------------------------------------------
+# Workflows, in skill-chain format under workflows/ (flows + chains). Tool
+# steps run here; assistant steps pause the run and hand Claude the step's
+# instructions, and the run resumes when Claude sends the outputs back.
+# ---------------------------------------------------------------------------
+
+def _tool_registry() -> dict:
+    """Every registered tool function by name, for tool steps to call."""
+    reg = {}
+    for name, obj in globals().items():
+        if callable(obj) and not name.startswith("_") and getattr(obj, "__module__", "") == __name__:
+            reg[name] = obj
+    return reg
+
+
+@mcp.tool()
+def list_workflows() -> dict:
+    """List the workflows (skill chains) this server runs, with each one's inputs and steps.
+    Use to pick a workflow and see what it needs before run_workflow.
+
+    Returns: workflows (name, description, required_inputs, optional_inputs, steps, terminal_outputs).
+    Setup: no setup.
+    Example: `list_workflows()`.
+    """
+    return {"workflows": [workflows.describe(n) for n in workflows.list_chain_names()]}
+
+
+@mcp.tool()
+def run_workflow(name: str, inputs: dict | None = None) -> dict:
+    """Start a workflow by name. Tool steps run immediately; the run pauses at a step Claude does in the chat and returns that step's instructions.
+    Use to run a whole marketing workflow (site diagnosis, weekly SEO loop, prospect pipeline, AI visibility and others) as one chain.
+
+    Returns: run_id, workflow, status (complete, needs_assistant, blocked), steps_done, next or outputs or blocked.
+    Setup: depends on the workflow's tools (list_workflows shows them).
+    Example: `run_workflow(name='site-diagnosis', inputs={'site_url': 'https://example.com'})`.
+    """
+    return workflows.start(name, inputs, _tool_registry())
+
+
+@mcp.tool()
+def continue_workflow(run_id: str, step: str | None = None, outputs: dict | None = None) -> dict:
+    """Send the outputs of the step Claude just did and continue the workflow; with no outputs, retry a blocked step.
+    Use after carrying out a needs_assistant step, or after connecting the platform a blocked step named.
+
+    Returns: run_id, workflow, status, steps_done, next or outputs or blocked.
+    Setup: no setup.
+    Example: `continue_workflow(run_id='20261110-120000-ab12cd', step='s2_plan', outputs={'fix_plan': [...]})`.
+    """
+    return workflows.resume(run_id, step, outputs, _tool_registry())
+
+
+def _register_workflow_prompts() -> None:
+    """One prompt per chain, named after it, with the chain's inputs as the prompt's arguments."""
+    import inspect
+
+    for chain in workflows.list_chain_names():
+        info = workflows.describe(chain)
+        params = [inspect.Parameter(n, inspect.Parameter.KEYWORD_ONLY, annotation=str)
+                  for n in info["required_inputs"]]
+        params += [inspect.Parameter(n, inspect.Parameter.KEYWORD_ONLY, default="", annotation=str)
+                   for n in info["optional_inputs"]]
+
+        def make(chain_name, chain_info):
+            def prompt(**kwargs) -> str:
+                given = {k: v for k, v in kwargs.items() if v not in (None, "")}
+                return (
+                    "Run the " + chain_name + " workflow.\n"
+                    "1. Call run_workflow with name='" + chain_name + "' and inputs=" + json.dumps(given) + ".\n"
+                    "2. When the result's status is needs_assistant, carry out next.instructions in this chat using "
+                    "next.inputs (call the tools the instructions name), then call continue_workflow with the run_id, "
+                    "the step, and outputs holding every name in next.expected_outputs.\n"
+                    "3. When the status is blocked, run the setup tool it names, then continue_workflow with the run_id.\n"
+                    "4. Repeat until the status is complete, then present the outputs. Steps: " +
+                    ", ".join("%s (%s)" % (s["flow"], s["runner"]) for s in chain_info["steps"]) + "."
+                )
+            prompt.__name__ = chain_name.replace("-", "_")
+            prompt.__doc__ = chain_info["description"]
+            prompt.__signature__ = inspect.Signature(params, return_annotation=str)
+            prompt.__annotations__ = {**{p.name: str for p in params}, "return": str}
+            return prompt
+
+        fn = make(chain, info)
+        mcp.prompt(name=fn.__name__, description=info["description"])(fn)
+
+
+_register_workflow_prompts()
 
 
 if __name__ == "__main__":

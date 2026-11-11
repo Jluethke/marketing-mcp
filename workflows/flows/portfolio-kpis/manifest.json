@@ -1,0 +1,39 @@
+{
+  "name": "portfolio-kpis",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "reporting",
+    "agency"
+  ],
+  "inputs": [
+    "days"
+  ],
+  "outputs": [
+    "portfolio"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Read per-client KPIs across ads, analytics and search, with a combined total.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "rollup-summary",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by rollup-summary"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "clients_overview",
+      "as": "overview",
+      "args": {
+        "days": "$days"
+      }
+    }
+  ],
+  "output_map": {
+    "portfolio": "$overview"
+  }
+}

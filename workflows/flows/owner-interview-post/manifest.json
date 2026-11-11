@@ -1,0 +1,31 @@
+{
+  "name": "owner-interview-post",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "content",
+    "seo",
+    "blogging"
+  ],
+  "inputs": [
+    "business_site",
+    "service",
+    "owner_answers",
+    "city"
+  ],
+  "outputs": [
+    "post_draft"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Draft a post of 750 words or more that answers one real customer question in its first sentence, built from the owner's own answers.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "copy-gate",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by copy-gate"
+    }
+  ]
+}

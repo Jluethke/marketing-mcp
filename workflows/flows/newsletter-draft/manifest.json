@@ -1,0 +1,33 @@
+{
+  "name": "newsletter-draft",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "newsletter",
+    "email-marketing"
+  ],
+  "inputs": [
+    "site_pages",
+    "window_days"
+  ],
+  "outputs": [
+    "newsletter_draft"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Take the posts from a recent window, find the one point they share, and draft the newsletter.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "site-pages",
+      "relationship": "fed_by",
+      "description": "provides site_pages needed here"
+    },
+    {
+      "flow_name": "copy-gate",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by copy-gate"
+    }
+  ]
+}

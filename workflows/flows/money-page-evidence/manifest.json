@@ -1,0 +1,65 @@
+{
+  "name": "money-page-evidence",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "seo",
+    "competitive-analysis"
+  ],
+  "inputs": [
+    "business_site",
+    "competitor_sites",
+    "money_page_url",
+    "target_keyword",
+    "competitor_pages"
+  ],
+  "outputs": [
+    "money_page_evidence"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "List the page topics competitors have and the site lacks, check one money page for its keyword, and compare it with the competitors' matching pages.",
+  "runner": "tool",
+  "related_flows": [
+    {
+      "flow_name": "money-page-decision",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by money-page-decision"
+    }
+  ],
+  "calls": [
+    {
+      "tool": "missing_pages",
+      "as": "missing",
+      "args": {
+        "site": "$business_site",
+        "competitor_sites": "$competitor_sites"
+      }
+    },
+    {
+      "tool": "money_page_check",
+      "as": "page_check",
+      "args": {
+        "url": "$money_page_url",
+        "keyword": "$target_keyword"
+      }
+    },
+    {
+      "tool": "competitor_page_gap",
+      "as": "gap",
+      "args": {
+        "url": "$money_page_url",
+        "competitor_urls": "$competitor_pages",
+        "keyword": "$target_keyword"
+      }
+    }
+  ],
+  "output_map": {
+    "money_page_evidence": {
+      "missing": "$missing",
+      "page_check": "$page_check",
+      "gap": "$gap"
+    }
+  }
+}

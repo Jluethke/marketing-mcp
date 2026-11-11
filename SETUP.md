@@ -12,6 +12,8 @@ into chat:
 - "connect analytics" (paste the service-account JSON contents; covers GA4 and
   Search Console)
 - "set pagespeed key" (optional, paste a free key)
+- "set anthropic key" (optional, paste an Anthropic API key; needed only for
+  `ask_assistant` and the `ai-visibility-baseline` workflow)
 
 Each writes the `.env` for you, applies it without a restart, and confirms by
 pinging the platform. The rest of this document is the manual reference for where
@@ -40,6 +42,7 @@ python doctor.py --live   # also ping the configured platforms
 | Google Ads | 30-60 min | yes (dev token) | keyword volumes, reporting, management |
 | Meta Ads | 15 min | no | Meta campaign reporting + management |
 | GA4 | 10 min | no | site analytics |
+| Anthropic | 2 min | no | AI visibility: buyer questions asked in clean sessions |
 
 Google Ads is the only one with a real wait (the developer-token review). Start
 that application first, then do the others while it is pending.
@@ -159,6 +162,17 @@ key) for reliable use.
 machine and read public pages only: the site itself and the Internet Archive.
 `growth_teardown` takes up to `time_budget_s` seconds (120 by default) because the
 archive answers slowly; it reports any part it skipped.
+
+The local-SEO, prospecting, email and copy, and site-hygiene tools need no
+credentials either (`cover_image` needs Pillow, installed by `requirements.txt`).
+`find_businesses` reads OpenStreetMap one request at a time; when its public servers
+are busy it says so and can be run again. `verify_email` with `smtp_probe=True` needs
+outbound port 25, which many home and office networks block; then the probe reports
+unknown.
+
+The workflows need no setup of their own. A workflow step whose tool needs a
+platform stops with the setup tool to run; after connecting it, `continue_workflow`
+retries the step.
 
 ---
 

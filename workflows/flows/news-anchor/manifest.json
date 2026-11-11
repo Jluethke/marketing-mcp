@@ -1,0 +1,27 @@
+{
+  "name": "news-anchor",
+  "version": "1.0.0",
+  "domain": "marketing",
+  "tags": [
+    "content",
+    "research"
+  ],
+  "inputs": [
+    "topic"
+  ],
+  "outputs": [
+    "news_item"
+  ],
+  "execution_pattern": "phase_pipeline",
+  "price": "0",
+  "license": "PRIVATE",
+  "description": "Search for news on a topic from the last fourteen days and pick one dated item, from its primary source, that changes something for customers.",
+  "runner": "assistant",
+  "related_flows": [
+    {
+      "flow_name": "news-post-draft",
+      "relationship": "feeds_into",
+      "description": "outputs consumed by news-post-draft"
+    }
+  ]
+}
